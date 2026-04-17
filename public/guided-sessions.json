@@ -1,0 +1,53 @@
+{
+  "sessions": [
+    {
+      "id": "arrive",
+      "title": "Arrive",
+      "subtitle": "Breath, one passage, silence",
+      "steps": [
+        { "kind": "intro", "text": "Sit upright. Let the shoulders drop. Nothing to fix—only notice." },
+        { "kind": "breathe", "seconds": 50, "hint": "Slow inhale, slower exhale." },
+        {
+          "kind": "read",
+          "book": 4,
+          "section": 17,
+          "lead": "Read in short phrases. Tap when you have taken the line in."
+        },
+        { "kind": "silence", "seconds": 75 },
+        {
+          "kind": "reflect",
+          "prompt": "What is outside your control right now? Name one thing you can do well anyway."
+        }
+      ]
+    },
+    {
+      "id": "judgment",
+      "title": "Judgment and fact",
+      "subtitle": "Book VIII",
+      "steps": [
+        { "kind": "intro", "text": "Steady attention. When the mind rushes to verdict, we pause." },
+        { "kind": "breathe", "seconds": 40 },
+        {
+          "kind": "read",
+          "book": 8,
+          "section": 47,
+          "lead": "Each line is enough. Advance when the words have landed."
+        },
+        { "kind": "silence", "seconds": 60 },
+        { "kind": "reflect", "prompt": "Separate one fact from the story you told about it." }
+      ]
+    },
+    {
+      "id": "evening",
+      "title": "Evening release",
+      "subtitle": "Book XII",
+      "steps": [
+        { "kind": "intro", "text": "Let the day thin out. No inventory of faults—only proportion." },
+        { "kind": "breathe", "seconds": 55 },
+        { "kind": "read", "book": 12, "section": 3, "lead": "Read as if someone kind were speaking to you." },
+        { "kind": "silence", "seconds": 90 },
+        { "kind": "reflect", "prompt": "What would you drop if you were not afraid of being misunderstood?" }
+      ]
+    }
+  ]
+}

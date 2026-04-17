@@ -28,6 +28,18 @@ export function initApp(appRoot: HTMLElement): void {
   const reader = initReader(readerPanel);
   initGuided(guidedPanel);
 
+  window.addEventListener("aurelius:open-passage", ((e: Event) => {
+    const ce = e as CustomEvent<{ book: number; section: number; translationId?: string }>;
+    const d = ce.detail;
+    if (!d || typeof d.book !== "number" || typeof d.section !== "number") return;
+    setFeature("reader");
+    void reader.goToPassage({
+      book: d.book,
+      section: d.section,
+      translationId: d.translationId,
+    });
+  }) as EventListener);
+
   function loadSavedFeature(): AppFeature {
     try {
       const s = localStorage.getItem(STORAGE_FEATURE);

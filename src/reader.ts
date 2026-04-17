@@ -5,11 +5,21 @@ const STORAGE_ID = "aurelius-passage-id";
 const STORAGE_FOCUS = "aurelius-focus";
 const STORAGE_DIGEST = "aurelius-digest";
 const STORAGE_TRANSLATION = "aurelius-translation";
+const STORAGE_THEME = "aurelius-theme";
+const STORAGE_STREAK_COUNT = "aurelius-streak-count";
+const STORAGE_STREAK_LAST = "aurelius-streak-last";
 
 const TRANSLATIONS: { id: string; file: string }[] = [
   { id: "casaubon", file: "/meditations.json" },
   { id: "long", file: "/meditations-long.json" },
+  { id: "chrystal", file: "/meditations-chrystal.json" },
 ];
+
+const TRANSLATION_LABELS: Record<string, string> = {
+  casaubon: "Meric Casaubon (1634)",
+  long: "George Long (1862)",
+  chrystal: "George W. Chrystal (1902)",
+};
 
 function flatText(raw: string): string {
   return raw.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
@@ -72,6 +82,7 @@ function excerptWithMatchHtml(text: string, query: string): string {
 
 export type ReaderController = {
   closeOverlays: () => void;
+  goToPassage: (opts: { book: number; section: number; translationId?: string }) => Promise<void>;
 };
 
 export function initReader(mount: HTMLElement): ReaderController {
@@ -171,10 +182,32 @@ export function initReader(mount: HTMLElement): ReaderController {
                   <select id="translation-select" class="menu-translation__select" aria-label="English translation">
                     <option value="casaubon">Meric Casaubon (1634)</option>
                     <option value="long">George Long (1862)</option>
+                    <option value="chrystal">George W. Chrystal (1902)</option>
                   </select>
-                  <p class="menu-translation__note">Both are public-domain texts from Project Gutenberg. Section breaks can differ.</p>
+                  <p class="menu-translation__note">Public-domain texts from Project Gutenberg. Section breaks can differ between editions.</p>
                 </div>
+                <div class="menu-appearance">
+                  <label class="menu-translation__label" for="theme-select">Appearance</label>
+                  <select id="theme-select" class="menu-translation__select" aria-label="Color theme">
+                    <option value="dark">Dark</option>
+                    <option value="sepia">Sepia</option>
+                    <option value="paper">Paper</option>
+                  </select>
+                </div>
+                <p class="menu-streak" id="menu-streak-line" aria-live="polite"></p>
                 <div class="menu-list" role="menu">
+                  <button type="button" class="menu-item" id="menu-item-today" role="menuitem">
+                    <span class="menu-item__label">Today&apos;s passage</span>
+                    <span class="menu-item__hint">Same text each calendar day</span>
+                  </button>
+                  <button type="button" class="menu-item" id="menu-item-compare" role="menuitem">
+                    <span class="menu-item__label">Compare translations</span>
+                    <span class="menu-item__hint">Same book &amp; section, two editions</span>
+                  </button>
+                  <button type="button" class="menu-item" id="menu-item-copy" role="menuitem">
+                    <span class="menu-item__label">Copy quotation</span>
+                    <span class="menu-item__hint">With book, section, translator</span>
+                  </button>
                   <button type="button" class="menu-item" id="menu-item-jump" role="menuitem">
                     <span class="menu-item__label">Jump to passage</span>
                     <span class="menu-item__hint">Book and section number</span>
@@ -227,6 +260,7 @@ export function initReader(mount: HTMLElement): ReaderController {
                   <div class="keys-row"><dt>B</dt><dd>Open books navigator</dd></div>
                   <div class="keys-row"><dt>M</dt><dd>Open this menu</dd></div>
                   <div class="keys-row"><dt>/</dt><dd>Open search</dd></div>
+                  <div class="keys-row"><dt>URL</dt><dd>Share <code>?t=</code> translation, <code>book=</code>, <code>section=</code> — updates as you read</dd></div>
                   <div class="keys-row"><dt>Esc</dt><dd>Close sheet; in navigation, back to books</dd></div>
                 </dl>
               </div>
@@ -237,6 +271,28 @@ export function initReader(mount: HTMLElement): ReaderController {
                 <p class="about-p about-p--mute">Reader is a quiet companion for the text. Swipe the passage to turn pages where supported.</p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet" id="compare-sheet" aria-hidden="true">
+        <button type="button" class="sheet__scrim" id="compare-scrim" aria-label="Close"></button>
+        <div class="sheet__panel sheet__panel--wide" role="dialog" aria-modal="true" aria-labelledby="compare-sheet-title">
+          <div class="sheet__toolbar">
+            <div class="sheet__toolbar-start"></div>
+            <h2 class="sheet__title" id="compare-sheet-title">Compare</h2>
+            <div class="sheet__toolbar-end">
+              <button type="button" class="icon-btn" id="compare-close" aria-label="Close">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="sheet__body sheet__body--compare">
+            <label class="compare-field">
+              <span class="compare-field__label">Other edition</span>
+              <select id="compare-other-select" class="menu-translation__select" aria-label="Second translation"></select>
+            </label>
+            <p class="compare-meta" id="compare-meta"></p>
+            <div class="compare-grid" id="compare-grid"></div>
           </div>
         </div>
       </div>
@@ -287,6 +343,116 @@ export function initReader(mount: HTMLElement): ReaderController {
   const searchStatus = mount.querySelector<HTMLElement>("#search-status")!;
   const searchResults = mount.querySelector<HTMLElement>("#search-results")!;
   const translationSelect = mount.querySelector<HTMLSelectElement>("#translation-select")!;
+  const themeSelect = mount.querySelector<HTMLSelectElement>("#theme-select")!;
+  const menuStreakLine = mount.querySelector<HTMLElement>("#menu-streak-line")!;
+  const menuItemToday = mount.querySelector<HTMLButtonElement>("#menu-item-today")!;
+  const menuItemCompare = mount.querySelector<HTMLButtonElement>("#menu-item-compare")!;
+  const menuItemCopy = mount.querySelector<HTMLButtonElement>("#menu-item-copy")!;
+  const compareSheet = mount.querySelector<HTMLElement>("#compare-sheet")!;
+  const compareScrim = mount.querySelector<HTMLButtonElement>("#compare-scrim")!;
+  const compareClose = mount.querySelector<HTMLButtonElement>("#compare-close")!;
+  const compareOtherSelect = mount.querySelector<HTMLSelectElement>("#compare-other-select")!;
+  const compareMeta = mount.querySelector<HTMLElement>("#compare-meta")!;
+  const compareGrid = mount.querySelector<HTMLElement>("#compare-grid")!;
+
+  const corpusCache = new Map<string, Corpus>();
+
+  function dateKey(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function dailyPassageIndex(len: number): number {
+    if (len <= 0) return 0;
+    const key = dateKey(new Date());
+    let h = 2166136261;
+    for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+    return (Math.abs(h) >>> 0) % len;
+  }
+
+  function parseUrlPassage(): { translationId: string; book: number; section: number } | null {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const book = Number(q.get("book"));
+      const section = Number(q.get("section"));
+      const t = q.get("t");
+      if (!Number.isFinite(book) || !Number.isFinite(section) || book < 1 || section < 1) return null;
+      if (!t || !TRANSLATIONS.some((x) => x.id === t)) return null;
+      return { translationId: t, book, section };
+    } catch {
+      return null;
+    }
+  }
+
+  function syncPassageUrl(): void {
+    const p = passages[index];
+    if (!p || typeof history === "undefined") return;
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set("t", activeTranslationId);
+      u.searchParams.set("book", String(p.book));
+      u.searchParams.set("section", String(p.section));
+      history.replaceState(null, "", u.toString());
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function motionOk(): boolean {
+    return typeof matchMedia === "undefined" || !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function passageFade(): void {
+    if (!motionOk()) return;
+    passageFade();
+  }
+
+  function updateStreakLine(): void {
+    try {
+      const today = dateKey(new Date());
+      const last = localStorage.getItem(STORAGE_STREAK_LAST);
+      let n = Number(localStorage.getItem(STORAGE_STREAK_COUNT) || "0") || 0;
+
+      if (last === today) {
+        menuStreakLine.textContent =
+          n > 1 ? `${n}-day streak.` : "Open any day to start a streak.";
+        return;
+      }
+
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      const yKey = dateKey(y);
+
+      if (last === yKey) n += 1;
+      else n = 1;
+
+      localStorage.setItem(STORAGE_STREAK_LAST, today);
+      localStorage.setItem(STORAGE_STREAK_COUNT, String(n));
+      menuStreakLine.textContent = n > 1 ? `${n}-day streak.` : "Streak started — see you tomorrow.";
+    } catch {
+      menuStreakLine.textContent = "";
+    }
+  }
+
+  function applyTheme(themeId: string): void {
+    const v = themeId === "sepia" || themeId === "paper" ? themeId : "dark";
+    document.documentElement.dataset.theme = v;
+    themeSelect.value = v;
+    try {
+      localStorage.setItem(STORAGE_THEME, v);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function loadTheme(): void {
+    try {
+      const v = localStorage.getItem(STORAGE_THEME);
+      if (v === "sepia" || v === "paper" || v === "dark") applyTheme(v);
+      else applyTheme("dark");
+    } catch {
+      applyTheme("dark");
+    }
+  }
 
   let passages: Passage[] = [];
   let index = 0;
@@ -325,7 +491,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   function getTranslationId(): string {
     try {
       const v = localStorage.getItem(STORAGE_TRANSLATION);
-      if (v === "long" || v === "casaubon") return v;
+      if (v === "long" || v === "casaubon" || v === "chrystal") return v;
     } catch {
       /* ignore */
     }
@@ -338,10 +504,6 @@ export function initReader(mount: HTMLElement): ReaderController {
     } catch {
       /* ignore */
     }
-  }
-
-  function corpusUrl(): string {
-    return TRANSLATIONS.find((t) => t.id === getTranslationId())?.file ?? "/meditations.json";
   }
 
   let activeTranslationId = getTranslationId();
@@ -424,7 +586,9 @@ export function initReader(mount: HTMLElement): ReaderController {
 
   function setBodyScrollLock(): void {
     const anyOpen =
-      navSheet.classList.contains("sheet--open") || menuSheet.classList.contains("sheet--open");
+      navSheet.classList.contains("sheet--open") ||
+      menuSheet.classList.contains("sheet--open") ||
+      compareSheet.classList.contains("sheet--open");
     document.body.style.overflow = anyOpen ? "hidden" : "";
   }
 
@@ -514,7 +678,7 @@ export function initReader(mount: HTMLElement): ReaderController {
         vibrate();
         closeMenu();
         render();
-        body.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+        passageFade();
       });
       li.appendChild(btn);
       frag.appendChild(li);
@@ -551,6 +715,7 @@ export function initReader(mount: HTMLElement): ReaderController {
       const r = await fetch(t.file);
       if (!r.ok) throw new Error(String(r.status));
       const data = (await r.json()) as Corpus;
+      corpusCache.set(id, data);
       saveTranslationId(id);
       activeTranslationId = id;
       ingestCorpus(data, anchor);
@@ -562,6 +727,101 @@ export function initReader(mount: HTMLElement): ReaderController {
     }
   }
 
+  function closeCompareSheet(): void {
+    compareSheet.classList.remove("sheet--open");
+    compareSheet.setAttribute("aria-hidden", "true");
+    setBodyScrollLock();
+  }
+
+  async function fillCompare(): Promise<void> {
+    const p = passages[index];
+    if (!p) return;
+    const otherId = compareOtherSelect.value;
+    compareMeta.textContent = `Book ${BOOK_ROMAN[p.book]} · Section ${p.section}`;
+    let otherData: Corpus;
+    if (corpusCache.has(otherId)) {
+      otherData = corpusCache.get(otherId)!;
+    } else {
+      const tr = TRANSLATIONS.find((x) => x.id === otherId);
+      if (!tr) return;
+      try {
+        const r = await fetch(tr.file);
+        if (!r.ok) return;
+        otherData = (await r.json()) as Corpus;
+        corpusCache.set(otherId, otherData);
+      } catch {
+        compareGrid.innerHTML = "<p class=\"compare-miss\">Could not load the other edition.</p>";
+        return;
+      }
+    }
+    const op = otherData.passages.find((x) => x.book === p.book && x.section === p.section);
+    compareGrid.innerHTML = "";
+    const colA = document.createElement("div");
+    colA.className = "compare-col";
+    const labelA = TRANSLATION_LABELS[activeTranslationId] ?? activeTranslationId;
+    colA.innerHTML = `<h3 class="compare-col__label">${escapeHtml(labelA)}</h3><p class="compare-col__text">${passageToHtml(p.text)}</p>`;
+    const colB = document.createElement("div");
+    colB.className = "compare-col";
+    const labelB = TRANSLATION_LABELS[otherId] ?? otherId;
+    if (op) {
+      colB.innerHTML = `<h3 class="compare-col__label">${escapeHtml(labelB)}</h3><p class="compare-col__text">${passageToHtml(op.text)}</p>`;
+    } else {
+      colB.innerHTML = `<h3 class="compare-col__label">${escapeHtml(labelB)}</h3><p class="compare-col__muted">No matching section in this edition.</p>`;
+    }
+    compareGrid.append(colA, colB);
+  }
+
+  function openCompareSheet(): void {
+    if (navSheet.classList.contains("sheet--open")) closeNavSheetOnly();
+    if (menuSheet.classList.contains("sheet--open")) closeMenu();
+    compareOtherSelect.innerHTML = "";
+    for (const tr of TRANSLATIONS) {
+      if (tr.id === activeTranslationId) continue;
+      const o = document.createElement("option");
+      o.value = tr.id;
+      o.textContent = TRANSLATION_LABELS[tr.id] ?? tr.id;
+      compareOtherSelect.appendChild(o);
+    }
+    const firstOther = TRANSLATIONS.find((x) => x.id !== activeTranslationId);
+    if (firstOther) compareOtherSelect.value = firstOther.id;
+    void fillCompare();
+    compareSheet.classList.add("sheet--open");
+    compareSheet.setAttribute("aria-hidden", "false");
+    setBodyScrollLock();
+  }
+
+  async function goToPassage(opts: {
+    book: number;
+    section: number;
+    translationId?: string;
+  }): Promise<void> {
+    const tid = opts.translationId ?? activeTranslationId;
+    if (tid !== activeTranslationId || passages.length === 0) {
+      await switchTranslation(tid);
+    }
+    const i = passages.findIndex((p) => p.book === opts.book && p.section === opts.section);
+    if (i >= 0) {
+      index = i;
+      beatIndex = 0;
+      render();
+    }
+  }
+
+  async function copyQuotation(): Promise<void> {
+    const p = passages[index];
+    if (!p) return;
+    const tr = corpusMeta.translator.trim() || TRANSLATION_LABELS[activeTranslationId] || activeTranslationId;
+    const block = `${flatText(p.text)}\n\n— Marcus Aurelius, Meditations, Book ${BOOK_ROMAN[p.book]}, §${p.section}. ${tr}`;
+    try {
+      await navigator.clipboard.writeText(block);
+      meta.textContent = "Copied to clipboard";
+      window.setTimeout(() => render(), 1400);
+    } catch {
+      meta.textContent = "Could not copy";
+      window.setTimeout(() => render(), 1600);
+    }
+  }
+
   function openMenuSheet(): void {
     if (navSheet.classList.contains("sheet--open")) closeNavSheetOnly();
     showMenuPanel("main");
@@ -569,6 +829,10 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuSheet.setAttribute("aria-hidden", "false");
     setBodyScrollLock();
     translationSelect.value = activeTranslationId;
+    themeSelect.value = document.documentElement.dataset.theme === "sepia" || document.documentElement.dataset.theme === "paper"
+      ? document.documentElement.dataset.theme
+      : "dark";
+    updateStreakLine();
     updateDigestMenuHint();
     btnMenu.focus();
   }
@@ -685,7 +949,7 @@ export function initReader(mount: HTMLElement): ReaderController {
         vibrate();
         closeSheet();
         render();
-        body.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+        passageFade();
       });
       li.appendChild(row);
       frag.appendChild(li);
@@ -741,6 +1005,7 @@ export function initReader(mount: HTMLElement): ReaderController {
       : ((index + 1) / passages.length) * 100;
     fill.style.width = `${pct}%`;
     saveIndex();
+    syncPassageUrl();
   }
 
   function goPassage(delta: number, beatPos: "first" | "last" = "first"): void {
@@ -757,7 +1022,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     }
     vibrate();
     render();
-    body.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+    passageFade();
   }
 
   function goBeat(delta: number): void {
@@ -779,7 +1044,7 @@ export function initReader(mount: HTMLElement): ReaderController {
         beatIndex++;
         vibrate();
         render();
-        body.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+        passageFade();
       } else {
         goPassage(1, "first");
       }
@@ -787,7 +1052,7 @@ export function initReader(mount: HTMLElement): ReaderController {
       beatIndex--;
       vibrate();
       render();
-      body.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+      passageFade();
     } else {
       goPassage(-1, "last");
     }
@@ -802,7 +1067,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     beatIndex = 0;
     vibrate();
     render();
-    body.animate([{ opacity: 0.5 }, { opacity: 1 }], { duration: 320, easing: "ease-out" });
+    passageFade();
   }
 
   btnPrev.addEventListener("click", () => goBeat(-1));
@@ -871,7 +1136,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     vibrate();
     closeMenu();
     render();
-    body.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+    passageFade();
   });
 
   menuItemDigest.addEventListener("click", () => {
@@ -899,6 +1164,11 @@ export function initReader(mount: HTMLElement): ReaderController {
       openMenuToSearch();
       return;
     }
+    if (e.key === "Escape" && compareSheet.classList.contains("sheet--open")) {
+      e.preventDefault();
+      closeCompareSheet();
+      return;
+    }
     if (e.key === "Escape" && menuSheet.classList.contains("sheet--open")) {
       e.preventDefault();
       if (menuMode !== "main") {
@@ -918,6 +1188,7 @@ export function initReader(mount: HTMLElement): ReaderController {
       return;
     }
     if (menuSheet.classList.contains("sheet--open")) return;
+    if (compareSheet.classList.contains("sheet--open")) return;
     if (navSheet.classList.contains("sheet--open")) return;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
@@ -965,18 +1236,31 @@ export function initReader(mount: HTMLElement): ReaderController {
     void switchTranslation(translationSelect.value);
   });
 
-  fetch(corpusUrl())
+  loadTheme();
+  const urlNav = parseUrlPassage();
+  const startTid = urlNav?.translationId ?? getTranslationId();
+  if (urlNav) {
+    saveTranslationId(urlNav.translationId);
+    activeTranslationId = urlNav.translationId;
+    translationSelect.value = urlNav.translationId;
+  }
+  const startFile = TRANSLATIONS.find((x) => x.id === startTid)?.file ?? "/meditations.json";
+
+  fetch(startFile)
     .then((r) => {
       if (!r.ok) throw new Error(String(r.status));
       return r.json() as Promise<Corpus>;
     })
     .then((data) => {
-      activeTranslationId = getTranslationId();
-      ingestCorpus(data, null);
+      corpusCache.set(startTid, data);
+      activeTranslationId = startTid;
+      ingestCorpus(data, urlNav ? { book: urlNav.book, section: urlNav.section } : null);
       translationSelect.value = activeTranslationId;
       loadFocus();
       loadDigest();
       updateDigestMenuHint();
+      updateStreakLine();
+      syncPassageUrl();
     })
     .catch(() => {
       meta.textContent = "Could not load text";
@@ -987,8 +1271,40 @@ export function initReader(mount: HTMLElement): ReaderController {
   function closeReaderOverlays(): void {
     if (navSheet.classList.contains("sheet--open")) closeSheet();
     if (menuSheet.classList.contains("sheet--open")) closeMenu();
+    if (compareSheet.classList.contains("sheet--open")) closeCompareSheet();
     setBodyScrollLock();
   }
 
-  return { closeOverlays: closeReaderOverlays };
+  compareScrim.addEventListener("click", closeCompareSheet);
+  compareClose.addEventListener("click", closeCompareSheet);
+  compareOtherSelect.addEventListener("change", () => {
+    void fillCompare();
+  });
+
+  themeSelect.addEventListener("change", () => {
+    applyTheme(themeSelect.value);
+  });
+
+  menuItemToday.addEventListener("click", () => {
+    if (passages.length === 0) return;
+    const j = dailyPassageIndex(passages.length);
+    index = j;
+    beatIndex = 0;
+    vibrate();
+    closeMenu();
+    render();
+    passageFade();
+  });
+
+  menuItemCompare.addEventListener("click", () => {
+    closeMenu();
+    openCompareSheet();
+  });
+
+  menuItemCopy.addEventListener("click", () => {
+    void copyQuotation();
+    closeMenu();
+  });
+
+  return { closeOverlays: closeReaderOverlays, goToPassage };
 }
