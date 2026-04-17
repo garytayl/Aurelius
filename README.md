@@ -1,24 +1,16 @@
 # Aurelius
 
-A chamber for reading Marcus Aurelius — **Meditations** only. Encounter, not consumption.
+A single surface: **Meditations** in front of you. Open the app and you are in the text.
 
-## What you get
+- **Reference line** (book / section) and **edition** control sit above the passage.
+- **Turn** — previous, today’s fixed passage, next — inline, not a floating bar.
+- **More** — find, jump, digest, compare, surface (dark / sepia / paper), about. Random lives here too.
+- **Note** — one prompt per day, one margin-style field; local only.
 
-- **Threshold** — Enter, continue where you left off, open today’s fixed passage and beat, or start from the beginning. **Sessions** (timed guided flows) stay secondary.
-- **Reading** — Editions from Project Gutenberg, digest beats, focus, find, passage jump, compare two editions.
-- **Reflect** — One prompt per day and a private note, stored locally.
-
-Stack: Vite, TypeScript, vanilla DOM, static JSON in `public/`.
-
-```bash
-npm install
-npm run dev
-```
+Vite, TypeScript, vanilla DOM. JSON in `public/`.
 
 ```bash
-npm run build && npm run preview
+npm install && npm run dev
 ```
 
-## What it refuses to be
-
-Not a wellness product, not a quote feed, not a streak machine. No framework rewrite required to keep it that way.
+No entry screen, no sessions UI, no streaks — by design.
