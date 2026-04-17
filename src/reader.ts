@@ -1,0 +1,782 @@
+import type { Corpus, Passage } from "./types";
+
+const STORAGE_ID = "aurelius-passage-id";
+const STORAGE_FOCUS = "aurelius-focus";
+
+function flatText(raw: string): string {
+  return raw.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function passageToHtml(text: string): string {
+  const flat = flatText(text);
+  const escaped = flat
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped.replace(/_([^_]+)_/g, "<em>$1</em>");
+}
+
+function ordinal(n: number): string {
+  const j = n % 10;
+  const k = n % 100;
+  if (k >= 11 && k <= 13) return `${n}th`;
+  if (j === 1) return `${n}st`;
+  if (j === 2) return `${n}nd`;
+  if (j === 3) return `${n}rd`;
+  return `${n}th`;
+}
+
+/** Roman numerals for book numbers 1–12 */
+const BOOK_ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+
+function previewLine(raw: string, max = 120): string {
+  const t = flatText(raw);
+  if (t.length <= max) return t;
+  return `${t.slice(0, max).trim()}…`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** HTML string: excerpt around first case-insensitive match, with <mark> on the match */
+function excerptWithMatchHtml(text: string, query: string): string {
+  const flat = flatText(text);
+  const q = query.trim();
+  if (!q) return escapeHtml(previewLine(text, 120));
+  const lower = flat.toLowerCase();
+  const qLower = q.toLowerCase();
+  const idx = lower.indexOf(qLower);
+  if (idx < 0) return escapeHtml(previewLine(text, 120));
+  const pad = 52;
+  const a = Math.max(0, idx - pad);
+  const b = Math.min(flat.length, idx + q.length + pad);
+  const snippet = flat.slice(a, b);
+  const rel = idx - a;
+  const before = escapeHtml(snippet.slice(0, rel));
+  const midRaw = snippet.slice(rel, rel + q.length);
+  const mid = escapeHtml(midRaw);
+  const after = escapeHtml(snippet.slice(rel + q.length));
+  const prefix = a > 0 ? "…" : "";
+  const suffix = b < flat.length ? "…" : "";
+  return `${prefix}${before}<mark class="search-hit__mark">${mid}</mark>${after}${suffix}`;
+}
+
+export function init(root: HTMLElement): void {
+  root.innerHTML = `
+    <div class="shell" data-focus="0">
+      <div class="progress" role="presentation" aria-hidden="true">
+        <div class="progress__fill"></div>
+      </div>
+      <header class="top">
+        <div class="top__slot top__slot--start">
+          <button type="button" class="icon-btn" id="btn-books" aria-label="Books and sections" aria-haspopup="dialog">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M4 6h16M4 12h10M4 18h16"/>
+            </svg>
+          </button>
+        </div>
+        <span class="brand">Meditations</span>
+        <div class="top__slot top__slot--end">
+          <button type="button" class="icon-btn" id="btn-menu" aria-label="Menu" aria-haspopup="dialog">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <circle cx="12" cy="6" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="12" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
+        <button type="button" class="icon-btn" id="btn-focus" aria-pressed="false" aria-label="Focus mode">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M4 8V6a2 2 0 012-2h2M20 8V6a2 2 0 00-2-2h-2M4 16v2a2 2 0 002 2h2M20 16v2a2 2 0 01-2 2h-2"/>
+          </svg>
+        </button>
+        </div>
+      </header>
+      <main class="stage">
+        <button type="button" class="meta meta--jump" id="meta" title="Sections in this book"></button>
+        <article class="passage" id="passage-body"></article>
+      </main>
+      <nav class="dock" aria-label="Navigate passages">
+        <button type="button" class="dock-btn" id="btn-prev" aria-label="Previous passage">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <button type="button" class="dock-btn dock-btn--spark" id="btn-rand" aria-label="Random passage">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2l1.2 3.6L17 7l-3.8 1.4L12 12l-1.2-3.6L7 7l3.8-1.4L12 2zM5 14l.8 2.4L8 17l-2.2.8L5 20l-.8-2.4L2 17l2.2-.8L5 14zm14 0l.8 2.4L22 17l-2.2.8L19 20l-.8-2.4L16 17l2.2-.8L19 14z"/>
+          </svg>
+        </button>
+        <button type="button" class="dock-btn" id="btn-next" aria-label="Next passage">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </nav>
+      <div class="sheet" id="nav-sheet" aria-hidden="true">
+        <button type="button" class="sheet__scrim" id="sheet-scrim" aria-label="Close"></button>
+        <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+          <div class="sheet__toolbar">
+            <div class="sheet__toolbar-start">
+              <button type="button" class="icon-btn sheet__back" id="sheet-back" aria-label="Back to books">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+              </button>
+            </div>
+            <h2 class="sheet__title" id="sheet-title">Books</h2>
+            <div class="sheet__toolbar-end">
+              <button type="button" class="icon-btn" id="sheet-close" aria-label="Close">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="sheet__body">
+            <div class="book-grid" id="sheet-books"></div>
+            <div class="section-list-wrap" id="sheet-sections" hidden></div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet" id="menu-sheet" aria-hidden="true">
+        <button type="button" class="sheet__scrim" id="menu-scrim" aria-label="Close"></button>
+        <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="menu-sheet-title">
+          <div class="sheet__toolbar">
+            <div class="sheet__toolbar-start">
+              <button type="button" class="icon-btn sheet__back" id="menu-back" aria-label="Back">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+              </button>
+            </div>
+            <h2 class="sheet__title" id="menu-sheet-title">Menu</h2>
+            <div class="sheet__toolbar-end">
+              <button type="button" class="icon-btn" id="menu-close" aria-label="Close">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="sheet__body sheet__body--menu">
+            <div class="menu-panels">
+              <div class="menu-panel" id="menu-panel-main">
+                <div class="menu-list" role="menu">
+                  <button type="button" class="menu-item" id="menu-item-jump" role="menuitem">
+                    <span class="menu-item__label">Jump to passage</span>
+                    <span class="menu-item__hint">Book and section number</span>
+                  </button>
+                  <button type="button" class="menu-item" id="menu-item-search" role="menuitem">
+                    <span class="menu-item__label">Search</span>
+                    <span class="menu-item__hint">Find words in the text</span>
+                  </button>
+                  <button type="button" class="menu-item" id="menu-item-keys" role="menuitem">
+                    <span class="menu-item__label">Keyboard shortcuts</span>
+                    <span class="menu-item__hint">Arrow keys, R, F, B, M, /</span>
+                  </button>
+                  <button type="button" class="menu-item" id="menu-item-about" role="menuitem">
+                    <span class="menu-item__label">About this text</span>
+                    <span class="menu-item__hint">Source &amp; edition</span>
+                  </button>
+                </div>
+              </div>
+              <div class="menu-panel" id="menu-panel-jump" hidden>
+                <form class="jump-form" id="jump-form">
+                  <label class="jump-field">
+                    <span class="jump-field__label">Book</span>
+                    <select class="jump-input" id="jump-book" aria-label="Book number"></select>
+                  </label>
+                  <label class="jump-field">
+                    <span class="jump-field__label">Section</span>
+                    <input class="jump-input" id="jump-section" type="number" inputmode="numeric" min="1" step="1" placeholder="e.g. 12" aria-label="Section number" />
+                  </label>
+                  <p class="jump-error" id="jump-error" role="alert" hidden></p>
+                  <button type="submit" class="jump-submit">Go to passage</button>
+                </form>
+              </div>
+              <div class="menu-panel menu-panel--search" id="menu-panel-search" hidden>
+                <label class="search-field">
+                  <span class="search-field__label">Search</span>
+                  <input type="search" class="search-input" id="search-q" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Words from the Meditations" aria-label="Search passages" />
+                </label>
+                <p class="search-status" id="search-status" aria-live="polite"></p>
+                <ul class="search-results" id="search-results"></ul>
+              </div>
+              <div class="menu-panel menu-panel--prose" id="menu-panel-keys" hidden>
+                <dl class="keys-list">
+                  <div class="keys-row"><dt>← →</dt><dd>Previous / next passage</dd></div>
+                  <div class="keys-row"><dt>R</dt><dd>Random passage</dd></div>
+                  <div class="keys-row"><dt>F</dt><dd>Toggle focus mode</dd></div>
+                  <div class="keys-row"><dt>B</dt><dd>Open books navigator</dd></div>
+                  <div class="keys-row"><dt>M</dt><dd>Open this menu</dd></div>
+                  <div class="keys-row"><dt>/</dt><dd>Open search</dd></div>
+                  <div class="keys-row"><dt>Esc</dt><dd>Close sheet; in navigation, back to books</dd></div>
+                </dl>
+              </div>
+              <div class="menu-panel menu-panel--prose" id="menu-panel-about" hidden>
+                <p class="about-lead">Marcus Aurelius — <em>Meditations</em></p>
+                <p class="about-p" id="about-source"></p>
+                <p class="about-p" id="about-translator"></p>
+                <p class="about-p about-p--mute">Reader is a quiet companion for the text. Swipe the passage to turn pages where supported.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const shell = root.querySelector<HTMLElement>(".shell")!;
+  const stage = root.querySelector<HTMLElement>(".stage")!;
+  const meta = root.querySelector<HTMLButtonElement>("#meta")!;
+  const body = root.querySelector<HTMLElement>("#passage-body")!;
+  const fill = root.querySelector<HTMLElement>(".progress__fill")!;
+  const btnPrev = root.querySelector<HTMLButtonElement>("#btn-prev")!;
+  const btnNext = root.querySelector<HTMLButtonElement>("#btn-next")!;
+  const btnRand = root.querySelector<HTMLButtonElement>("#btn-rand")!;
+  const btnFocus = root.querySelector<HTMLButtonElement>("#btn-focus")!;
+  const btnBooks = root.querySelector<HTMLButtonElement>("#btn-books")!;
+  const navSheet = root.querySelector<HTMLElement>("#nav-sheet")!;
+  const sheetScrim = root.querySelector<HTMLButtonElement>("#sheet-scrim")!;
+  const sheetClose = root.querySelector<HTMLButtonElement>("#sheet-close")!;
+  const sheetBack = root.querySelector<HTMLButtonElement>("#sheet-back")!;
+  const sheetTitle = root.querySelector<HTMLElement>("#sheet-title")!;
+  const sheetBooks = root.querySelector<HTMLElement>("#sheet-books")!;
+  const sheetSections = root.querySelector<HTMLElement>("#sheet-sections")!;
+  const menuSheet = root.querySelector<HTMLElement>("#menu-sheet")!;
+  const menuScrim = root.querySelector<HTMLButtonElement>("#menu-scrim")!;
+  const menuClose = root.querySelector<HTMLButtonElement>("#menu-close")!;
+  const menuBack = root.querySelector<HTMLButtonElement>("#menu-back")!;
+  const menuSheetTitle = root.querySelector<HTMLElement>("#menu-sheet-title")!;
+  const menuPanelMain = root.querySelector<HTMLElement>("#menu-panel-main")!;
+  const menuPanelJump = root.querySelector<HTMLElement>("#menu-panel-jump")!;
+  const menuPanelSearch = root.querySelector<HTMLElement>("#menu-panel-search")!;
+  const menuPanelKeys = root.querySelector<HTMLElement>("#menu-panel-keys")!;
+  const menuPanelAbout = root.querySelector<HTMLElement>("#menu-panel-about")!;
+  const menuItemJump = root.querySelector<HTMLButtonElement>("#menu-item-jump")!;
+  const menuItemSearch = root.querySelector<HTMLButtonElement>("#menu-item-search")!;
+  const menuItemKeys = root.querySelector<HTMLButtonElement>("#menu-item-keys")!;
+  const menuItemAbout = root.querySelector<HTMLButtonElement>("#menu-item-about")!;
+  const jumpForm = root.querySelector<HTMLFormElement>("#jump-form")!;
+  const jumpBook = root.querySelector<HTMLSelectElement>("#jump-book")!;
+  const jumpSection = root.querySelector<HTMLInputElement>("#jump-section")!;
+  const jumpError = root.querySelector<HTMLElement>("#jump-error")!;
+  const aboutSource = root.querySelector<HTMLElement>("#about-source")!;
+  const aboutTranslator = root.querySelector<HTMLElement>("#about-translator")!;
+  const btnMenu = root.querySelector<HTMLButtonElement>("#btn-menu")!;
+  const searchQ = root.querySelector<HTMLInputElement>("#search-q")!;
+  const searchStatus = root.querySelector<HTMLElement>("#search-status")!;
+  const searchResults = root.querySelector<HTMLElement>("#search-results")!;
+
+  let passages: Passage[] = [];
+  let index = 0;
+  let corpusMeta = { source: "", translator: "" };
+
+  type MenuMode = "main" | "jump" | "search" | "keys" | "about";
+  let menuMode: MenuMode = "main";
+
+  const SEARCH_MAX = 100;
+  let searchDebounce: ReturnType<typeof setTimeout> | undefined;
+
+  function loadIndex(): void {
+    try {
+      const raw = localStorage.getItem(STORAGE_ID);
+      if (!raw || passages.length === 0) return;
+      const i = passages.findIndex((p) => p.id === raw);
+      if (i >= 0) index = i;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function saveIndex(): void {
+    try {
+      localStorage.setItem(STORAGE_ID, passages[index]?.id ?? "");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function loadFocus(): void {
+    try {
+      const v = localStorage.getItem(STORAGE_FOCUS);
+      if (v === "1") setFocus(true);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function saveFocus(on: boolean): void {
+    try {
+      localStorage.setItem(STORAGE_FOCUS, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function setFocus(on: boolean): void {
+    shell.dataset.focus = on ? "1" : "0";
+    btnFocus.setAttribute("aria-pressed", on ? "true" : "false");
+    btnFocus.setAttribute("aria-label", on ? "Exit focus mode" : "Focus mode");
+    saveFocus(on);
+  }
+
+  function vibrate(): void {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(12);
+    }
+  }
+
+  let sheetBookMode: "books" | "sections" = "books";
+
+  function closeNavSheetOnly(): void {
+    navSheet.classList.remove("sheet--open");
+    navSheet.setAttribute("aria-hidden", "true");
+    setBodyScrollLock();
+  }
+
+  function closeSheet(): void {
+    closeNavSheetOnly();
+    btnBooks.focus();
+  }
+
+  function setBodyScrollLock(): void {
+    const anyOpen =
+      navSheet.classList.contains("sheet--open") || menuSheet.classList.contains("sheet--open");
+    document.body.style.overflow = anyOpen ? "hidden" : "";
+  }
+
+  function closeMenu(): void {
+    menuSheet.classList.remove("sheet--open");
+    menuSheet.setAttribute("aria-hidden", "true");
+    menuMode = "main";
+    menuPanelMain.hidden = false;
+    menuPanelJump.hidden = true;
+    menuPanelSearch.hidden = true;
+    menuPanelKeys.hidden = true;
+    menuPanelAbout.hidden = true;
+    menuBack.classList.add("is-inert");
+    menuSheetTitle.textContent = "Menu";
+    setBodyScrollLock();
+    btnMenu.focus();
+  }
+
+  function showMenuPanel(mode: MenuMode): void {
+    menuMode = mode;
+    menuPanelMain.hidden = mode !== "main";
+    menuPanelJump.hidden = mode !== "jump";
+    menuPanelSearch.hidden = mode !== "search";
+    menuPanelKeys.hidden = mode !== "keys";
+    menuPanelAbout.hidden = mode !== "about";
+    menuBack.classList.toggle("is-inert", mode === "main");
+    const titles: Record<MenuMode, string> = {
+      main: "Menu",
+      jump: "Jump",
+      search: "Search",
+      keys: "Shortcuts",
+      about: "About",
+    };
+    menuSheetTitle.textContent = titles[mode];
+  }
+
+  function refreshSearchResults(): void {
+    searchResults.innerHTML = "";
+    const q = searchQ.value.trim();
+    if (passages.length === 0) {
+      searchStatus.textContent = "";
+      return;
+    }
+    if (q.length < 2) {
+      searchStatus.textContent = "Type at least 2 letters to search.";
+      return;
+    }
+    const qLower = q.toLowerCase();
+    const hits: { p: Passage; i: number }[] = [];
+    passages.forEach((p, i) => {
+      if (flatText(p.text).toLowerCase().includes(qLower)) hits.push({ p, i });
+    });
+    const total = hits.length;
+    const shown = hits.slice(0, SEARCH_MAX);
+    if (total === 0) {
+      searchStatus.textContent = "No matches.";
+      return;
+    }
+    searchStatus.textContent =
+      total > SEARCH_MAX
+        ? `${total} matches (showing first ${SEARCH_MAX})`
+        : total === 1
+          ? "1 match"
+          : `${total} matches`;
+    const frag = document.createDocumentFragment();
+    for (const { p, i } of shown) {
+      const li = document.createElement("li");
+      li.className = "search-hit";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "search-hit__btn";
+      btn.setAttribute(
+        "aria-label",
+        `Book ${BOOK_ROMAN[p.book]}, section ${p.roman}. ${previewLine(p.text, 80)}`
+      );
+      if (i === index) btn.classList.add("search-hit__btn--current");
+      const meta = document.createElement("span");
+      meta.className = "search-hit__meta";
+      meta.textContent = `Book ${BOOK_ROMAN[p.book]} · §${p.section}`;
+      const sn = document.createElement("p");
+      sn.className = "search-hit__snippet";
+      sn.innerHTML = excerptWithMatchHtml(p.text, q);
+      btn.append(meta, sn);
+      btn.addEventListener("click", () => {
+        index = i;
+        vibrate();
+        closeMenu();
+        render();
+        body.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+      });
+      li.appendChild(btn);
+      frag.appendChild(li);
+    }
+    searchResults.appendChild(frag);
+  }
+
+  function openMenuSheet(): void {
+    if (navSheet.classList.contains("sheet--open")) closeNavSheetOnly();
+    showMenuPanel("main");
+    menuSheet.classList.add("sheet--open");
+    menuSheet.setAttribute("aria-hidden", "false");
+    setBodyScrollLock();
+    btnMenu.focus();
+  }
+
+  function openMenuSub(mode: Exclude<MenuMode, "main">): void {
+    if (mode === "jump") {
+      jumpError.hidden = true;
+      const p = passages[index];
+      if (p) {
+        jumpBook.value = String(p.book);
+        jumpSection.value = String(p.section);
+      }
+    }
+    if (mode === "search") {
+      refreshSearchResults();
+      requestAnimationFrame(() => searchQ.focus());
+    }
+    if (mode === "about") {
+      const src = corpusMeta.source.trim();
+      const tr = corpusMeta.translator.trim();
+      aboutSource.textContent = src ? `Source: ${src}.` : "";
+      aboutSource.hidden = !src;
+      aboutTranslator.textContent = tr ? `Edition: ${tr}.` : "";
+      aboutTranslator.hidden = !tr;
+    }
+    showMenuPanel(mode);
+  }
+
+  function openMenuToSearch(): void {
+    if (navSheet.classList.contains("sheet--open")) closeNavSheetOnly();
+    if (!menuSheet.classList.contains("sheet--open")) {
+      menuSheet.classList.add("sheet--open");
+      menuSheet.setAttribute("aria-hidden", "false");
+      setBodyScrollLock();
+    }
+    openMenuSub("search");
+  }
+
+  function buildJumpBookSelect(): void {
+    jumpBook.innerHTML = "";
+    for (let b = 1; b <= 12; b++) {
+      const o = document.createElement("option");
+      o.value = String(b);
+      o.textContent = `Book ${BOOK_ROMAN[b]}`;
+      jumpBook.appendChild(o);
+    }
+  }
+
+  function openSheetBooks(): void {
+    if (menuSheet.classList.contains("sheet--open")) closeMenu();
+    sheetBookMode = "books";
+    sheetTitle.textContent = "Books";
+    sheetBack.classList.add("is-inert");
+    sheetBooks.hidden = false;
+    sheetSections.hidden = true;
+    highlightBookGrid();
+    navSheet.classList.add("sheet--open");
+    navSheet.setAttribute("aria-hidden", "false");
+    setBodyScrollLock();
+  }
+
+  function highlightBookGrid(): void {
+    const cur = passages[index]?.book ?? 0;
+    sheetBooks.querySelectorAll(".book-cell").forEach((el, i) => {
+      el.classList.toggle("book-cell--current", i + 1 === cur);
+    });
+  }
+
+  function openSheetSectionsForBook(bookNum: number): void {
+    if (menuSheet.classList.contains("sheet--open")) closeMenu();
+    sheetBookMode = "sections";
+    sheetTitle.textContent = `Book ${BOOK_ROMAN[bookNum]}`;
+    sheetBack.classList.remove("is-inert");
+    sheetBooks.hidden = true;
+    sheetSections.hidden = false;
+    sheetSections.innerHTML = "";
+    const inBook = passages.filter((p) => p.book === bookNum);
+    const head = document.createElement("header");
+    head.className = "section-list__head";
+    const metaTop = document.createElement("p");
+    metaTop.className = "section-list__meta";
+    metaTop.textContent = inBook.length === 1 ? "1 section" : `${inBook.length} sections`;
+    head.appendChild(metaTop);
+    sheetSections.appendChild(head);
+    const list = document.createElement("ul");
+    list.className = "section-list";
+    const frag = document.createDocumentFragment();
+    passages.forEach((p, i) => {
+      if (p.book !== bookNum) return;
+      const li = document.createElement("li");
+      li.className = "section-list__item";
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "section-row";
+      row.setAttribute("aria-label", `Book ${BOOK_ROMAN[bookNum]}, section ${p.roman}`);
+      if (i === index) row.classList.add("section-row--current");
+      const badge = document.createElement("span");
+      badge.className = "section-row__badge";
+      badge.setAttribute("aria-hidden", "true");
+      badge.textContent = p.roman;
+      const main = document.createElement("span");
+      main.className = "section-row__main";
+      const kicker = document.createElement("span");
+      kicker.className = "section-row__kicker";
+      kicker.textContent = `Section ${p.section}`;
+      const preview = document.createElement("span");
+      preview.className = "section-row__preview";
+      preview.textContent = previewLine(p.text);
+      main.append(kicker, preview);
+      row.append(badge, main);
+      row.addEventListener("click", () => {
+        index = i;
+        vibrate();
+        closeSheet();
+        render();
+        body.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+      });
+      li.appendChild(row);
+      frag.appendChild(li);
+    });
+    list.appendChild(frag);
+    sheetSections.appendChild(list);
+    navSheet.classList.add("sheet--open");
+    navSheet.setAttribute("aria-hidden", "false");
+    setBodyScrollLock();
+    requestAnimationFrame(() => {
+      sheetSections.querySelector(".section-row--current")?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  function buildBookGrid(): void {
+    sheetBooks.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    for (let b = 1; b <= 12; b++) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "book-cell";
+      btn.textContent = BOOK_ROMAN[b];
+      btn.setAttribute("aria-label", `Book ${BOOK_ROMAN[b]}`);
+      btn.addEventListener("click", () => {
+        vibrate();
+        openSheetSectionsForBook(b);
+      });
+      frag.appendChild(btn);
+    }
+    sheetBooks.appendChild(frag);
+  }
+
+  function render(): void {
+    const p = passages[index];
+    if (!p) return;
+    meta.textContent = `Book ${p.book} · ${ordinal(p.section)}`;
+    body.innerHTML = `<p class="passage__p">${passageToHtml(p.text)}</p>`;
+    const pct = ((index + 1) / passages.length) * 100;
+    fill.style.width = `${pct}%`;
+    saveIndex();
+  }
+
+  function go(delta: number): void {
+    const n = passages.length;
+    if (n === 0) return;
+    index = (index + delta + n) % n;
+    vibrate();
+    render();
+    body.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+  }
+
+  function goRandom(): void {
+    const n = passages.length;
+    if (n < 2) return;
+    let j = index;
+    while (j === index) j = Math.floor(Math.random() * n);
+    index = j;
+    vibrate();
+    render();
+    body.animate([{ opacity: 0.5 }, { opacity: 1 }], { duration: 320, easing: "ease-out" });
+  }
+
+  btnPrev.addEventListener("click", () => go(-1));
+  btnNext.addEventListener("click", () => go(1));
+  btnRand.addEventListener("click", goRandom);
+
+  btnFocus.addEventListener("click", () => {
+    const on = shell.dataset.focus !== "1";
+    setFocus(on);
+  });
+
+  btnBooks.addEventListener("click", () => {
+    openSheetBooks();
+  });
+
+  btnMenu.addEventListener("click", () => {
+    openMenuSheet();
+  });
+
+  menuScrim.addEventListener("click", closeMenu);
+  menuClose.addEventListener("click", closeMenu);
+  menuBack.addEventListener("click", () => {
+    if (menuMode === "main") return;
+    showMenuPanel("main");
+  });
+
+  menuItemJump.addEventListener("click", () => {
+    openMenuSub("jump");
+  });
+
+  menuItemSearch.addEventListener("click", () => {
+    openMenuToSearch();
+  });
+
+  searchQ.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => refreshSearchResults(), 220);
+  });
+
+  menuItemKeys.addEventListener("click", () => {
+    openMenuSub("keys");
+  });
+
+  menuItemAbout.addEventListener("click", () => {
+    openMenuSub("about");
+  });
+
+  jumpForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    jumpError.hidden = true;
+    const book = Number(jumpBook.value);
+    const section = Number(jumpSection.value);
+    if (!Number.isFinite(section) || section < 1) {
+      jumpError.textContent = "Enter a valid section number.";
+      jumpError.hidden = false;
+      return;
+    }
+    const i = passages.findIndex((p) => p.book === book && p.section === section);
+    if (i < 0) {
+      jumpError.textContent = `No passage for Book ${BOOK_ROMAN[book]}, section ${section}.`;
+      jumpError.hidden = false;
+      return;
+    }
+    index = i;
+    vibrate();
+    closeMenu();
+    render();
+    body.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+  });
+
+  meta.addEventListener("click", () => {
+    if (passages.length === 0) return;
+    if (menuSheet.classList.contains("sheet--open")) closeMenu();
+    openSheetSectionsForBook(passages[index].book);
+  });
+
+  sheetScrim.addEventListener("click", closeSheet);
+  sheetClose.addEventListener("click", closeSheet);
+  sheetBack.addEventListener("click", () => {
+    openSheetBooks();
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const t = e.target;
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
+      e.preventDefault();
+      openMenuToSearch();
+      return;
+    }
+    if (e.key === "Escape" && menuSheet.classList.contains("sheet--open")) {
+      e.preventDefault();
+      if (menuMode !== "main") {
+        showMenuPanel("main");
+      } else {
+        closeMenu();
+      }
+      return;
+    }
+    if (e.key === "Escape" && navSheet.classList.contains("sheet--open")) {
+      e.preventDefault();
+      if (sheetBookMode === "sections") {
+        openSheetBooks();
+      } else {
+        closeSheet();
+      }
+      return;
+    }
+    if (menuSheet.classList.contains("sheet--open")) return;
+    if (navSheet.classList.contains("sheet--open")) return;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      go(-1);
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      go(1);
+    }
+    if (e.key === "r" || e.key === "R") {
+      goRandom();
+    }
+    if (e.key === "f" || e.key === "F") {
+      setFocus(shell.dataset.focus !== "1");
+    }
+    if (e.key === "b" || e.key === "B") {
+      openSheetBooks();
+    }
+    if (e.key === "m" || e.key === "M") {
+      openMenuSheet();
+    }
+  });
+
+  let touchStartX = 0;
+  stage.addEventListener(
+    "touchstart",
+    (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    },
+    { passive: true }
+  );
+  stage.addEventListener(
+    "touchend",
+    (e) => {
+      const dx = e.changedTouches[0].screenX - touchStartX;
+      const threshold = 56;
+      if (dx > threshold) go(-1);
+      else if (dx < -threshold) go(1);
+    },
+    { passive: true }
+  );
+
+  fetch("/meditations.json")
+    .then((r) => {
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json() as Promise<Corpus>;
+    })
+    .then((data) => {
+      passages = data.passages;
+      corpusMeta = { source: data.source ?? "", translator: data.translator ?? "" };
+      buildBookGrid();
+      buildJumpBookSelect();
+      loadIndex();
+      loadFocus();
+      render();
+    })
+    .catch(() => {
+      meta.textContent = "Could not load text";
+      body.innerHTML =
+        "<p class=\"passage__p\">Place <code>meditations.json</code> in <code>public/</code> and run the dev server.</p>";
+    });
+}
