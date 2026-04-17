@@ -1,4 +1,4 @@
 import "./style.css";
-import { init } from "./reader";
+import { initApp } from "./app";
 
-init(document.querySelector<HTMLElement>("#app")!);
+initApp(document.querySelector<HTMLElement>("#app")!);

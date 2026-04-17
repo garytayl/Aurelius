@@ -1,7 +1,15 @@
 import type { Corpus, Passage } from "./types";
+import { splitDigestBeats } from "./beats";
 
 const STORAGE_ID = "aurelius-passage-id";
 const STORAGE_FOCUS = "aurelius-focus";
+const STORAGE_DIGEST = "aurelius-digest";
+const STORAGE_TRANSLATION = "aurelius-translation";
+
+const TRANSLATIONS: { id: string; file: string }[] = [
+  { id: "casaubon", file: "/meditations.json" },
+  { id: "long", file: "/meditations-long.json" },
+];
 
 function flatText(raw: string): string {
   return raw.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
@@ -62,9 +70,17 @@ function excerptWithMatchHtml(text: string, query: string): string {
   return `${prefix}${before}<mark class="search-hit__mark">${mid}</mark>${after}${suffix}`;
 }
 
-export function init(root: HTMLElement): void {
-  root.innerHTML = `
-    <div class="shell" data-focus="0">
+export type ReaderController = {
+  closeOverlays: () => void;
+};
+
+export function initReader(mount: HTMLElement): ReaderController {
+  function readerActive(): boolean {
+    return !mount.hidden;
+  }
+
+  mount.innerHTML = `
+    <div class="shell" data-focus="0" data-digest="0">
       <div class="progress" role="presentation" aria-hidden="true">
         <div class="progress__fill"></div>
       </div>
@@ -150,10 +166,22 @@ export function init(root: HTMLElement): void {
           <div class="sheet__body sheet__body--menu">
             <div class="menu-panels">
               <div class="menu-panel" id="menu-panel-main">
+                <div class="menu-translation">
+                  <label class="menu-translation__label" for="translation-select">Translation</label>
+                  <select id="translation-select" class="menu-translation__select" aria-label="English translation">
+                    <option value="casaubon">Meric Casaubon (1634)</option>
+                    <option value="long">George Long (1862)</option>
+                  </select>
+                  <p class="menu-translation__note">Both are public-domain texts from Project Gutenberg. Section breaks can differ.</p>
+                </div>
                 <div class="menu-list" role="menu">
                   <button type="button" class="menu-item" id="menu-item-jump" role="menuitem">
                     <span class="menu-item__label">Jump to passage</span>
                     <span class="menu-item__hint">Book and section number</span>
+                  </button>
+                  <button type="button" class="menu-item menu-item--toggle" id="menu-item-digest" role="menuitemcheckbox" aria-pressed="false">
+                    <span class="menu-item__label">Digest mode</span>
+                    <span class="menu-item__hint" id="menu-digest-hint">One short thought at a time — off</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-search" role="menuitem">
                     <span class="menu-item__label">Search</span>
@@ -193,7 +221,7 @@ export function init(root: HTMLElement): void {
               </div>
               <div class="menu-panel menu-panel--prose" id="menu-panel-keys" hidden>
                 <dl class="keys-list">
-                  <div class="keys-row"><dt>← →</dt><dd>Previous / next passage</dd></div>
+                  <div class="keys-row"><dt>← →</dt><dd>Turn page; digest mode uses one short thought per step</dd></div>
                   <div class="keys-row"><dt>R</dt><dd>Random passage</dd></div>
                   <div class="keys-row"><dt>F</dt><dd>Toggle focus mode</dd></div>
                   <div class="keys-row"><dt>B</dt><dd>Open books navigator</dd></div>
@@ -215,50 +243,55 @@ export function init(root: HTMLElement): void {
     </div>
   `;
 
-  const shell = root.querySelector<HTMLElement>(".shell")!;
-  const stage = root.querySelector<HTMLElement>(".stage")!;
-  const meta = root.querySelector<HTMLButtonElement>("#meta")!;
-  const body = root.querySelector<HTMLElement>("#passage-body")!;
-  const fill = root.querySelector<HTMLElement>(".progress__fill")!;
-  const btnPrev = root.querySelector<HTMLButtonElement>("#btn-prev")!;
-  const btnNext = root.querySelector<HTMLButtonElement>("#btn-next")!;
-  const btnRand = root.querySelector<HTMLButtonElement>("#btn-rand")!;
-  const btnFocus = root.querySelector<HTMLButtonElement>("#btn-focus")!;
-  const btnBooks = root.querySelector<HTMLButtonElement>("#btn-books")!;
-  const navSheet = root.querySelector<HTMLElement>("#nav-sheet")!;
-  const sheetScrim = root.querySelector<HTMLButtonElement>("#sheet-scrim")!;
-  const sheetClose = root.querySelector<HTMLButtonElement>("#sheet-close")!;
-  const sheetBack = root.querySelector<HTMLButtonElement>("#sheet-back")!;
-  const sheetTitle = root.querySelector<HTMLElement>("#sheet-title")!;
-  const sheetBooks = root.querySelector<HTMLElement>("#sheet-books")!;
-  const sheetSections = root.querySelector<HTMLElement>("#sheet-sections")!;
-  const menuSheet = root.querySelector<HTMLElement>("#menu-sheet")!;
-  const menuScrim = root.querySelector<HTMLButtonElement>("#menu-scrim")!;
-  const menuClose = root.querySelector<HTMLButtonElement>("#menu-close")!;
-  const menuBack = root.querySelector<HTMLButtonElement>("#menu-back")!;
-  const menuSheetTitle = root.querySelector<HTMLElement>("#menu-sheet-title")!;
-  const menuPanelMain = root.querySelector<HTMLElement>("#menu-panel-main")!;
-  const menuPanelJump = root.querySelector<HTMLElement>("#menu-panel-jump")!;
-  const menuPanelSearch = root.querySelector<HTMLElement>("#menu-panel-search")!;
-  const menuPanelKeys = root.querySelector<HTMLElement>("#menu-panel-keys")!;
-  const menuPanelAbout = root.querySelector<HTMLElement>("#menu-panel-about")!;
-  const menuItemJump = root.querySelector<HTMLButtonElement>("#menu-item-jump")!;
-  const menuItemSearch = root.querySelector<HTMLButtonElement>("#menu-item-search")!;
-  const menuItemKeys = root.querySelector<HTMLButtonElement>("#menu-item-keys")!;
-  const menuItemAbout = root.querySelector<HTMLButtonElement>("#menu-item-about")!;
-  const jumpForm = root.querySelector<HTMLFormElement>("#jump-form")!;
-  const jumpBook = root.querySelector<HTMLSelectElement>("#jump-book")!;
-  const jumpSection = root.querySelector<HTMLInputElement>("#jump-section")!;
-  const jumpError = root.querySelector<HTMLElement>("#jump-error")!;
-  const aboutSource = root.querySelector<HTMLElement>("#about-source")!;
-  const aboutTranslator = root.querySelector<HTMLElement>("#about-translator")!;
-  const btnMenu = root.querySelector<HTMLButtonElement>("#btn-menu")!;
-  const searchQ = root.querySelector<HTMLInputElement>("#search-q")!;
-  const searchStatus = root.querySelector<HTMLElement>("#search-status")!;
-  const searchResults = root.querySelector<HTMLElement>("#search-results")!;
+  const shell = mount.querySelector<HTMLElement>(".shell")!;
+  const stage = mount.querySelector<HTMLElement>(".stage")!;
+  const meta = mount.querySelector<HTMLButtonElement>("#meta")!;
+  const body = mount.querySelector<HTMLElement>("#passage-body")!;
+  const fill = mount.querySelector<HTMLElement>(".progress__fill")!;
+  const btnPrev = mount.querySelector<HTMLButtonElement>("#btn-prev")!;
+  const btnNext = mount.querySelector<HTMLButtonElement>("#btn-next")!;
+  const btnRand = mount.querySelector<HTMLButtonElement>("#btn-rand")!;
+  const btnFocus = mount.querySelector<HTMLButtonElement>("#btn-focus")!;
+  const btnBooks = mount.querySelector<HTMLButtonElement>("#btn-books")!;
+  const navSheet = mount.querySelector<HTMLElement>("#nav-sheet")!;
+  const sheetScrim = mount.querySelector<HTMLButtonElement>("#sheet-scrim")!;
+  const sheetClose = mount.querySelector<HTMLButtonElement>("#sheet-close")!;
+  const sheetBack = mount.querySelector<HTMLButtonElement>("#sheet-back")!;
+  const sheetTitle = mount.querySelector<HTMLElement>("#sheet-title")!;
+  const sheetBooks = mount.querySelector<HTMLElement>("#sheet-books")!;
+  const sheetSections = mount.querySelector<HTMLElement>("#sheet-sections")!;
+  const menuSheet = mount.querySelector<HTMLElement>("#menu-sheet")!;
+  const menuScrim = mount.querySelector<HTMLButtonElement>("#menu-scrim")!;
+  const menuClose = mount.querySelector<HTMLButtonElement>("#menu-close")!;
+  const menuBack = mount.querySelector<HTMLButtonElement>("#menu-back")!;
+  const menuSheetTitle = mount.querySelector<HTMLElement>("#menu-sheet-title")!;
+  const menuPanelMain = mount.querySelector<HTMLElement>("#menu-panel-main")!;
+  const menuPanelJump = mount.querySelector<HTMLElement>("#menu-panel-jump")!;
+  const menuPanelSearch = mount.querySelector<HTMLElement>("#menu-panel-search")!;
+  const menuPanelKeys = mount.querySelector<HTMLElement>("#menu-panel-keys")!;
+  const menuPanelAbout = mount.querySelector<HTMLElement>("#menu-panel-about")!;
+  const menuItemJump = mount.querySelector<HTMLButtonElement>("#menu-item-jump")!;
+  const menuItemDigest = mount.querySelector<HTMLButtonElement>("#menu-item-digest")!;
+  const menuDigestHint = mount.querySelector<HTMLElement>("#menu-digest-hint")!;
+  const menuItemSearch = mount.querySelector<HTMLButtonElement>("#menu-item-search")!;
+  const menuItemKeys = mount.querySelector<HTMLButtonElement>("#menu-item-keys")!;
+  const menuItemAbout = mount.querySelector<HTMLButtonElement>("#menu-item-about")!;
+  const jumpForm = mount.querySelector<HTMLFormElement>("#jump-form")!;
+  const jumpBook = mount.querySelector<HTMLSelectElement>("#jump-book")!;
+  const jumpSection = mount.querySelector<HTMLInputElement>("#jump-section")!;
+  const jumpError = mount.querySelector<HTMLElement>("#jump-error")!;
+  const aboutSource = mount.querySelector<HTMLElement>("#about-source")!;
+  const aboutTranslator = mount.querySelector<HTMLElement>("#about-translator")!;
+  const btnMenu = mount.querySelector<HTMLButtonElement>("#btn-menu")!;
+  const searchQ = mount.querySelector<HTMLInputElement>("#search-q")!;
+  const searchStatus = mount.querySelector<HTMLElement>("#search-status")!;
+  const searchResults = mount.querySelector<HTMLElement>("#search-results")!;
+  const translationSelect = mount.querySelector<HTMLSelectElement>("#translation-select")!;
 
   let passages: Passage[] = [];
   let index = 0;
+  /** Index of the short "beat" within the current passage when digest mode is on */
+  let beatIndex = 0;
   let corpusMeta = { source: "", translator: "" };
 
   type MenuMode = "main" | "jump" | "search" | "keys" | "about";
@@ -272,7 +305,10 @@ export function init(root: HTMLElement): void {
       const raw = localStorage.getItem(STORAGE_ID);
       if (!raw || passages.length === 0) return;
       const i = passages.findIndex((p) => p.id === raw);
-      if (i >= 0) index = i;
+      if (i >= 0) {
+        index = i;
+        beatIndex = 0;
+      }
     } catch {
       /* ignore */
     }
@@ -286,6 +322,30 @@ export function init(root: HTMLElement): void {
     }
   }
 
+  function getTranslationId(): string {
+    try {
+      const v = localStorage.getItem(STORAGE_TRANSLATION);
+      if (v === "long" || v === "casaubon") return v;
+    } catch {
+      /* ignore */
+    }
+    return "casaubon";
+  }
+
+  function saveTranslationId(id: string): void {
+    try {
+      localStorage.setItem(STORAGE_TRANSLATION, id);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function corpusUrl(): string {
+    return TRANSLATIONS.find((t) => t.id === getTranslationId())?.file ?? "/meditations.json";
+  }
+
+  let activeTranslationId = getTranslationId();
+
   function loadFocus(): void {
     try {
       const v = localStorage.getItem(STORAGE_FOCUS);
@@ -293,6 +353,39 @@ export function init(root: HTMLElement): void {
     } catch {
       /* ignore */
     }
+  }
+
+  function loadDigest(): void {
+    try {
+      const v = localStorage.getItem(STORAGE_DIGEST);
+      shell.dataset.digest = v === "1" ? "1" : "0";
+    } catch {
+      shell.dataset.digest = "0";
+    }
+  }
+
+  function saveDigest(on: boolean): void {
+    try {
+      localStorage.setItem(STORAGE_DIGEST, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function updateDigestMenuHint(): void {
+    const on = shell.dataset.digest === "1";
+    menuItemDigest.setAttribute("aria-pressed", on ? "true" : "false");
+    menuDigestHint.textContent = on
+      ? "One short thought at a time — on"
+      : "One short thought at a time — off";
+  }
+
+  function setDigest(on: boolean): void {
+    shell.dataset.digest = on ? "1" : "0";
+    saveDigest(on);
+    beatIndex = 0;
+    updateDigestMenuHint();
+    render();
   }
 
   function saveFocus(on: boolean): void {
@@ -417,6 +510,7 @@ export function init(root: HTMLElement): void {
       btn.append(meta, sn);
       btn.addEventListener("click", () => {
         index = i;
+        beatIndex = 0;
         vibrate();
         closeMenu();
         render();
@@ -428,12 +522,54 @@ export function init(root: HTMLElement): void {
     searchResults.appendChild(frag);
   }
 
+  function ingestCorpus(data: Corpus, anchor: { book: number; section: number } | null): void {
+    passages = data.passages;
+    corpusMeta = { source: data.source ?? "", translator: data.translator ?? "" };
+    if (anchor) {
+      let i = passages.findIndex((p) => p.book === anchor.book && p.section === anchor.section);
+      if (i < 0) i = passages.findIndex((p) => p.book === anchor.book);
+      if (i < 0) i = 0;
+      index = i;
+    } else {
+      loadIndex();
+    }
+    beatIndex = 0;
+    buildBookGrid();
+    buildJumpBookSelect();
+    render();
+  }
+
+  async function switchTranslation(id: string): Promise<void> {
+    if (id === activeTranslationId && passages.length > 0) {
+      translationSelect.value = activeTranslationId;
+      return;
+    }
+    const t = TRANSLATIONS.find((x) => x.id === id);
+    if (!t) return;
+    const anchor = { book: passages[index]?.book ?? 1, section: passages[index]?.section ?? 1 };
+    try {
+      const r = await fetch(t.file);
+      if (!r.ok) throw new Error(String(r.status));
+      const data = (await r.json()) as Corpus;
+      saveTranslationId(id);
+      activeTranslationId = id;
+      ingestCorpus(data, anchor);
+      translationSelect.value = id;
+      refreshSearchResults();
+    } catch {
+      translationSelect.value = activeTranslationId;
+      meta.textContent = "Could not load translation";
+    }
+  }
+
   function openMenuSheet(): void {
     if (navSheet.classList.contains("sheet--open")) closeNavSheetOnly();
     showMenuPanel("main");
     menuSheet.classList.add("sheet--open");
     menuSheet.setAttribute("aria-hidden", "false");
     setBodyScrollLock();
+    translationSelect.value = activeTranslationId;
+    updateDigestMenuHint();
     btnMenu.focus();
   }
 
@@ -545,6 +681,7 @@ export function init(root: HTMLElement): void {
       row.append(badge, main);
       row.addEventListener("click", () => {
         index = i;
+        beatIndex = 0;
         vibrate();
         closeSheet();
         render();
@@ -584,20 +721,76 @@ export function init(root: HTMLElement): void {
   function render(): void {
     const p = passages[index];
     if (!p) return;
-    meta.textContent = `Book ${p.book} · ${ordinal(p.section)}`;
-    body.innerHTML = `<p class="passage__p">${passageToHtml(p.text)}</p>`;
-    const pct = ((index + 1) / passages.length) * 100;
+    const digestOn = shell.dataset.digest === "1";
+    let beats = digestOn ? splitDigestBeats(p.text) : [];
+    if (digestOn && beats.length === 0) beats = [flatText(p.text)];
+    if (digestOn && beats.length > 0) {
+      beatIndex = Math.min(beatIndex, Math.max(0, beats.length - 1));
+    }
+    const displayText =
+      digestOn && beats.length > 0 ? (beats[beatIndex] ?? beats[0]) : p.text;
+    const showBeatMeta = digestOn && beats.length > 1;
+    meta.textContent = showBeatMeta
+      ? `Book ${p.book} · ${ordinal(p.section)} · ${beatIndex + 1} / ${beats.length}`
+      : `Book ${p.book} · ${ordinal(p.section)}`;
+    const digestClass = digestOn ? " passage__p--digest" : "";
+    body.innerHTML = `<p class="passage__p${digestClass}">${passageToHtml(displayText)}</p>`;
+    const b = Math.max(1, beats.length);
+    const pct = digestOn
+      ? ((index + (beatIndex + 1) / b) / passages.length) * 100
+      : ((index + 1) / passages.length) * 100;
     fill.style.width = `${pct}%`;
     saveIndex();
   }
 
-  function go(delta: number): void {
+  function goPassage(delta: number, beatPos: "first" | "last" = "first"): void {
     const n = passages.length;
     if (n === 0) return;
     index = (index + delta + n) % n;
+    if (shell.dataset.digest === "1") {
+      const p = passages[index];
+      const beats = p ? splitDigestBeats(p.text) : [];
+      beatIndex =
+        beatPos === "last" && beats.length > 0 ? Math.max(0, beats.length - 1) : 0;
+    } else {
+      beatIndex = 0;
+    }
     vibrate();
     render();
     body.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+  }
+
+  function goBeat(delta: number): void {
+    const n = passages.length;
+    if (n === 0) return;
+    if (shell.dataset.digest !== "1") {
+      goPassage(delta, "first");
+      return;
+    }
+    const p = passages[index];
+    if (!p) return;
+    const beats = splitDigestBeats(p.text);
+    if (beats.length <= 1) {
+      goPassage(delta, "first");
+      return;
+    }
+    if (delta > 0) {
+      if (beatIndex < beats.length - 1) {
+        beatIndex++;
+        vibrate();
+        render();
+        body.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+      } else {
+        goPassage(1, "first");
+      }
+    } else if (beatIndex > 0) {
+      beatIndex--;
+      vibrate();
+      render();
+      body.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+    } else {
+      goPassage(-1, "last");
+    }
   }
 
   function goRandom(): void {
@@ -606,13 +799,14 @@ export function init(root: HTMLElement): void {
     let j = index;
     while (j === index) j = Math.floor(Math.random() * n);
     index = j;
+    beatIndex = 0;
     vibrate();
     render();
     body.animate([{ opacity: 0.5 }, { opacity: 1 }], { duration: 320, easing: "ease-out" });
   }
 
-  btnPrev.addEventListener("click", () => go(-1));
-  btnNext.addEventListener("click", () => go(1));
+  btnPrev.addEventListener("click", () => goBeat(-1));
+  btnNext.addEventListener("click", () => goBeat(1));
   btnRand.addEventListener("click", goRandom);
 
   btnFocus.addEventListener("click", () => {
@@ -673,10 +867,15 @@ export function init(root: HTMLElement): void {
       return;
     }
     index = i;
+    beatIndex = 0;
     vibrate();
     closeMenu();
     render();
     body.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+  });
+
+  menuItemDigest.addEventListener("click", () => {
+    setDigest(shell.dataset.digest !== "1");
   });
 
   meta.addEventListener("click", () => {
@@ -692,6 +891,7 @@ export function init(root: HTMLElement): void {
   });
 
   window.addEventListener("keydown", (e) => {
+    if (!readerActive()) return;
     if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const t = e.target;
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
@@ -721,11 +921,11 @@ export function init(root: HTMLElement): void {
     if (navSheet.classList.contains("sheet--open")) return;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      go(-1);
+      goBeat(-1);
     }
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      go(1);
+      goBeat(1);
     }
     if (e.key === "r" || e.key === "R") {
       goRandom();
@@ -752,31 +952,43 @@ export function init(root: HTMLElement): void {
   stage.addEventListener(
     "touchend",
     (e) => {
+      if (!readerActive()) return;
       const dx = e.changedTouches[0].screenX - touchStartX;
       const threshold = 56;
-      if (dx > threshold) go(-1);
-      else if (dx < -threshold) go(1);
+      if (dx > threshold) goBeat(-1);
+      else if (dx < -threshold) goBeat(1);
     },
     { passive: true }
   );
 
-  fetch("/meditations.json")
+  translationSelect.addEventListener("change", () => {
+    void switchTranslation(translationSelect.value);
+  });
+
+  fetch(corpusUrl())
     .then((r) => {
       if (!r.ok) throw new Error(String(r.status));
       return r.json() as Promise<Corpus>;
     })
     .then((data) => {
-      passages = data.passages;
-      corpusMeta = { source: data.source ?? "", translator: data.translator ?? "" };
-      buildBookGrid();
-      buildJumpBookSelect();
-      loadIndex();
+      activeTranslationId = getTranslationId();
+      ingestCorpus(data, null);
+      translationSelect.value = activeTranslationId;
       loadFocus();
-      render();
+      loadDigest();
+      updateDigestMenuHint();
     })
     .catch(() => {
       meta.textContent = "Could not load text";
       body.innerHTML =
-        "<p class=\"passage__p\">Place <code>meditations.json</code> in <code>public/</code> and run the dev server.</p>";
+        "<p class=\"passage__p\">Place JSON in <code>public/</code> and run the dev server.</p>";
     });
+
+  function closeReaderOverlays(): void {
+    if (navSheet.classList.contains("sheet--open")) closeSheet();
+    if (menuSheet.classList.contains("sheet--open")) closeMenu();
+    setBodyScrollLock();
+  }
+
+  return { closeOverlays: closeReaderOverlays };
 }
