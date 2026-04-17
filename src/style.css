@@ -111,27 +111,14 @@ body {
 
 .shell[data-focus="1"] .folio__toolbar,
 .shell[data-focus="1"] .folio__turn {
-  opacity: 0.32;
+  opacity: 0.3;
 }
 
-/* Progress — hairline, easy to ignore */
-.progress {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.04);
-  flex-shrink: 0;
-  opacity: 0.65;
-}
-
-.progress__fill {
-  height: 100%;
-  width: 0%;
-  background: var(--accent-dim);
-  opacity: 0.55;
-  transition: width 0.35s ease;
-}
-
-.shell[data-focus="1"] .progress {
-  opacity: 0.22;
+@media (min-width: 48rem) {
+  .shell[data-focus="1"] .folio__toolbar,
+  .shell[data-focus="1"] .folio__turn {
+    opacity: 0.2;
+  }
 }
 
 /* Folio chrome: marginal utility, low contrast */
@@ -191,21 +178,6 @@ body {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-}
-
-.folio__edition-wrap::after {
-  content: "";
-  position: absolute;
-  right: 0.05rem;
-  top: 50%;
-  width: 0.28rem;
-  height: 0.28rem;
-  margin-top: -0.05rem;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.28;
-  pointer-events: none;
 }
 
 .folio__edition:focus {
@@ -322,7 +294,7 @@ html[data-theme="paper"] .folio__edition {
   width: 100%;
   max-width: var(--reader-measure);
   margin-inline: auto;
-  padding: 0.85rem clamp(1.1rem, 5vw, 2.25rem) 2.25rem;
+  padding: 0.95rem clamp(1.15rem, 5vw, 2.35rem) 2.35rem;
   box-sizing: border-box;
   scroll-padding-bottom: 2rem;
 }
