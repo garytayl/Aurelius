@@ -368,6 +368,21 @@ html[data-theme="paper"] .folio__edition {
   hanging-punctuation: first last;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  #passage-body.passage--turn .passage__p {
+    animation: passage-turn 0.2s ease;
+  }
+}
+
+@keyframes passage-turn {
+  from {
+    opacity: 0.82;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .passage__p--digest {
   max-width: none;
   margin-inline: 0;

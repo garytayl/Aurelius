@@ -437,9 +437,13 @@ export function initReader(mount: HTMLElement): ReaderController {
     return typeof matchMedia === "undefined" || !matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
+  /** Subtle cue on turn; was accidentally recursive — keep stack-safe. */
   function passageFade(): void {
     if (!motionOk()) return;
-    passageFade();
+    body.classList.remove("passage--turn");
+    void body.offsetWidth;
+    body.classList.add("passage--turn");
+    window.setTimeout(() => body.classList.remove("passage--turn"), 220);
   }
 
   function applyTheme(themeId: string): void {
@@ -1251,6 +1255,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     if (menuSheet.classList.contains("sheet--open")) return;
     if (compareSheet.classList.contains("sheet--open")) return;
     if (navSheet.classList.contains("sheet--open")) return;
+    if (document.activeElement === reflectNote) return;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       goBeat(-1);
@@ -1273,20 +1278,49 @@ export function initReader(mount: HTMLElement): ReaderController {
     }
   });
 
+  let touchTrackId: number | null = null;
   let touchStartX = 0;
+  let touchStartY = 0;
   stage.addEventListener(
     "touchstart",
     (e) => {
-      touchStartX = e.changedTouches[0].screenX;
+      if (e.touches.length !== 1) {
+        touchTrackId = null;
+        return;
+      }
+      const t = e.touches[0];
+      touchTrackId = t.identifier;
+      touchStartX = t.screenX;
+      touchStartY = t.screenY;
+    },
+    { passive: true }
+  );
+  stage.addEventListener(
+    "touchcancel",
+    () => {
+      touchTrackId = null;
     },
     { passive: true }
   );
   stage.addEventListener(
     "touchend",
     (e) => {
-      if (!readerActive()) return;
-      const dx = e.changedTouches[0].screenX - touchStartX;
+      if (!readerActive() || touchTrackId === null) return;
+      let end: Touch | undefined;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === touchTrackId) {
+          end = e.changedTouches[i];
+          break;
+        }
+      }
+      touchTrackId = null;
+      if (!end) return;
+      const dx = end.screenX - touchStartX;
+      const dy = end.screenY - touchStartY;
       const threshold = 56;
+      if (Math.abs(dx) < threshold) return;
+      /* Vertical-dominant movement = scrolling, not paging */
+      if (Math.abs(dy) >= Math.abs(dx) * 0.75) return;
       if (dx > threshold) goBeat(-1);
       else if (dx < -threshold) goBeat(1);
     },
