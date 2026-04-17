@@ -6,8 +6,6 @@ const STORAGE_FOCUS = "aurelius-focus";
 const STORAGE_DIGEST = "aurelius-digest";
 const STORAGE_TRANSLATION = "aurelius-translation";
 const STORAGE_THEME = "aurelius-theme";
-const STORAGE_STREAK_COUNT = "aurelius-streak-count";
-const STORAGE_STREAK_LAST = "aurelius-streak-last";
 const STORAGE_TAKEAWAY_PREFIX = "aurelius-takeaway-";
 
 /** Marcus-specific prompts; one per day is chosen deterministically by date. */
@@ -98,6 +96,8 @@ export type ReaderController = {
   goToPassage: (opts: { book: number; section: number; translationId?: string }) => Promise<void>;
   /** Jump to today’s deterministic passage and digest beat; enables focus. */
   goToTodaySession: () => void;
+  /** First passage; digest and focus off. */
+  openFromBeginning: () => void;
 };
 
 export function initReader(mount: HTMLElement): ReaderController {
@@ -112,23 +112,24 @@ export function initReader(mount: HTMLElement): ReaderController {
       </div>
       <header class="top">
         <div class="top__slot top__slot--start">
-          <button type="button" class="today-btn" id="btn-today" aria-label="Today’s reading">Today</button>
-          <button type="button" class="icon-btn" id="btn-books" aria-label="Books and sections" aria-haspopup="dialog">
+          <button type="button" class="return-btn" id="btn-return">Return</button>
+          <button type="button" class="today-btn" id="btn-today" aria-label="Today">Today</button>
+          <button type="button" class="icon-btn" id="btn-books" aria-label="Books" aria-haspopup="dialog">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path d="M4 6h16M4 12h10M4 18h16"/>
             </svg>
           </button>
         </div>
-        <span class="brand">Meditations</span>
+        <span class="brand" aria-hidden="true">·</span>
         <div class="top__slot top__slot--end">
-          <button type="button" class="icon-btn" id="btn-menu" aria-label="Menu" aria-haspopup="dialog">
+          <button type="button" class="icon-btn" id="btn-menu" aria-label="Options" aria-haspopup="dialog">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
               <circle cx="12" cy="6" r="1.5" fill="currentColor" stroke="none"/>
               <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
               <circle cx="12" cy="18" r="1.5" fill="currentColor" stroke="none"/>
             </svg>
           </button>
-        <button type="button" class="icon-btn" id="btn-focus" aria-pressed="false" aria-label="Focus mode">
+        <button type="button" class="icon-btn" id="btn-focus" aria-pressed="false" aria-label="Focus">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M4 8V6a2 2 0 012-2h2M20 8V6a2 2 0 00-2-2h-2M4 16v2a2 2 0 002 2h2M20 16v2a2 2 0 01-2 2h-2"/>
           </svg>
@@ -136,11 +137,12 @@ export function initReader(mount: HTMLElement): ReaderController {
         </div>
       </header>
       <main class="stage">
-        <button type="button" class="meta meta--jump" id="meta" title="Sections in this book"></button>
+        <button type="button" class="meta meta--jump" id="meta" title="Sections"></button>
         <article class="passage" id="passage-body"></article>
-        <section class="reflect" id="reflect-section" aria-label="Reflection" hidden>
+        <section class="reflect" id="reflect-section" aria-label="Reflect" hidden>
+          <p class="reflect__kicker">Reflect</p>
           <p class="reflect__prompt" id="reflect-prompt"></p>
-          <label class="reflect__label" for="reflect-note">Your takeaway</label>
+          <label class="reflect__label" for="reflect-note">Note</label>
           <textarea
             id="reflect-note"
             class="reflect__note"
@@ -148,20 +150,20 @@ export function initReader(mount: HTMLElement): ReaderController {
             rows="3"
             autocomplete="off"
             spellcheck="true"
-            placeholder="One line is enough."
+            placeholder="Private. A line if you need it."
           ></textarea>
         </section>
       </main>
-      <nav class="dock" aria-label="Navigate passages">
-        <button type="button" class="dock-btn" id="btn-prev" aria-label="Previous passage">
+      <nav class="dock" aria-label="Turn">
+        <button type="button" class="dock-btn" id="btn-prev" aria-label="Previous">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
         </button>
-        <button type="button" class="dock-btn dock-btn--spark" id="btn-rand" aria-label="Random passage">
+        <button type="button" class="dock-btn" id="btn-rand" aria-label="Random">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12 2l1.2 3.6L17 7l-3.8 1.4L12 12l-1.2-3.6L7 7l3.8-1.4L12 2zM5 14l.8 2.4L8 17l-2.2.8L5 20l-.8-2.4L2 17l2.2-.8L5 14zm14 0l.8 2.4L22 17l-2.2.8L19 20l-.8-2.4L16 17l2.2-.8L19 14z"/>
           </svg>
         </button>
-        <button type="button" class="dock-btn" id="btn-next" aria-label="Next passage">
+        <button type="button" class="dock-btn" id="btn-next" aria-label="Next">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
         </button>
       </nav>
@@ -196,7 +198,7 @@ export function initReader(mount: HTMLElement): ReaderController {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
               </button>
             </div>
-            <h2 class="sheet__title" id="menu-sheet-title">Menu</h2>
+            <h2 class="sheet__title" id="menu-sheet-title">Options</h2>
             <div class="sheet__toolbar-end">
               <button type="button" class="icon-btn" id="menu-close" aria-label="Close">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -207,55 +209,54 @@ export function initReader(mount: HTMLElement): ReaderController {
             <div class="menu-panels">
               <div class="menu-panel" id="menu-panel-main">
                 <div class="menu-translation">
-                  <label class="menu-translation__label" for="translation-select">Translation</label>
-                  <select id="translation-select" class="menu-translation__select" aria-label="English translation">
+                  <label class="menu-translation__label" for="translation-select">Edition</label>
+                  <select id="translation-select" class="menu-translation__select" aria-label="Edition">
                     <option value="casaubon">Meric Casaubon (1634)</option>
                     <option value="long">George Long (1862)</option>
                     <option value="chrystal">George W. Chrystal (1902)</option>
                   </select>
-                  <p class="menu-translation__note">Public-domain texts from Project Gutenberg. Section breaks can differ between editions.</p>
+                  <p class="menu-translation__note">Project Gutenberg. Section breaks differ by edition.</p>
                 </div>
                 <div class="menu-appearance">
-                  <label class="menu-translation__label" for="theme-select">Appearance</label>
-                  <select id="theme-select" class="menu-translation__select" aria-label="Color theme">
+                  <label class="menu-translation__label" for="theme-select">Surface</label>
+                  <select id="theme-select" class="menu-translation__select" aria-label="Surface">
                     <option value="dark">Dark</option>
                     <option value="sepia">Sepia</option>
                     <option value="paper">Paper</option>
                   </select>
                 </div>
-                <p class="menu-streak" id="menu-streak-line" aria-live="polite"></p>
                 <div class="menu-list" role="menu">
                   <button type="button" class="menu-item" id="menu-item-today" role="menuitem">
-                    <span class="menu-item__label">Today&apos;s reading</span>
-                    <span class="menu-item__hint">Deterministic passage and digest beat</span>
+                    <span class="menu-item__label">Today</span>
+                    <span class="menu-item__hint">Fixed for the calendar day</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-compare" role="menuitem">
-                    <span class="menu-item__label">Compare translations</span>
-                    <span class="menu-item__hint">Same book &amp; section, two editions</span>
+                    <span class="menu-item__label">Compare</span>
+                    <span class="menu-item__hint">Same passage, two editions</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-copy" role="menuitem">
-                    <span class="menu-item__label">Copy quotation</span>
-                    <span class="menu-item__hint">With book, section, translator</span>
+                    <span class="menu-item__label">Copy</span>
+                    <span class="menu-item__hint">Passage and citation</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-jump" role="menuitem">
-                    <span class="menu-item__label">Jump to passage</span>
-                    <span class="menu-item__hint">Book and section number</span>
+                    <span class="menu-item__label">Passage</span>
+                    <span class="menu-item__hint">Book and section</span>
                   </button>
                   <button type="button" class="menu-item menu-item--toggle" id="menu-item-digest" role="menuitemcheckbox" aria-pressed="false">
-                    <span class="menu-item__label">Digest mode</span>
-                    <span class="menu-item__hint" id="menu-digest-hint">One short thought at a time — off</span>
+                    <span class="menu-item__label">Digest</span>
+                    <span class="menu-item__hint" id="menu-digest-hint">One beat — off</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-search" role="menuitem">
-                    <span class="menu-item__label">Search</span>
-                    <span class="menu-item__hint">Find words in the text</span>
+                    <span class="menu-item__label">Find</span>
+                    <span class="menu-item__hint">Search the text</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-keys" role="menuitem">
-                    <span class="menu-item__label">Keyboard shortcuts</span>
-                    <span class="menu-item__hint">Arrow keys, R, F, B, M, /</span>
+                    <span class="menu-item__label">Keys</span>
+                    <span class="menu-item__hint">Shortcuts</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-about" role="menuitem">
-                    <span class="menu-item__label">About this text</span>
-                    <span class="menu-item__hint">Source &amp; edition</span>
+                    <span class="menu-item__label">About</span>
+                    <span class="menu-item__hint">Source</span>
                   </button>
                 </div>
               </div>
@@ -270,34 +271,34 @@ export function initReader(mount: HTMLElement): ReaderController {
                     <input class="jump-input" id="jump-section" type="number" inputmode="numeric" min="1" step="1" placeholder="e.g. 12" aria-label="Section number" />
                   </label>
                   <p class="jump-error" id="jump-error" role="alert" hidden></p>
-                  <button type="submit" class="jump-submit">Go to passage</button>
+                  <button type="submit" class="jump-submit">Go</button>
                 </form>
               </div>
               <div class="menu-panel menu-panel--search" id="menu-panel-search" hidden>
                 <label class="search-field">
-                  <span class="search-field__label">Search</span>
-                  <input type="search" class="search-input" id="search-q" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Words from the Meditations" aria-label="Search passages" />
+                  <span class="search-field__label">Find</span>
+                  <input type="search" class="search-input" id="search-q" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Word or phrase" aria-label="Find" />
                 </label>
                 <p class="search-status" id="search-status" aria-live="polite"></p>
                 <ul class="search-results" id="search-results"></ul>
               </div>
               <div class="menu-panel menu-panel--prose" id="menu-panel-keys" hidden>
                 <dl class="keys-list">
-                  <div class="keys-row"><dt>← →</dt><dd>Turn page; digest mode uses one short thought per step</dd></div>
-                  <div class="keys-row"><dt>R</dt><dd>Random passage</dd></div>
-                  <div class="keys-row"><dt>F</dt><dd>Toggle focus mode</dd></div>
-                  <div class="keys-row"><dt>B</dt><dd>Open books navigator</dd></div>
-                  <div class="keys-row"><dt>M</dt><dd>Open this menu</dd></div>
-                  <div class="keys-row"><dt>/</dt><dd>Open search</dd></div>
-                  <div class="keys-row"><dt>URL</dt><dd>Share <code>?t=</code> translation, <code>book=</code>, <code>section=</code> — updates as you read</dd></div>
-                  <div class="keys-row"><dt>Esc</dt><dd>Close sheet; in navigation, back to books</dd></div>
+                  <div class="keys-row"><dt>← →</dt><dd>Turn; digest advances by beat</dd></div>
+                  <div class="keys-row"><dt>R</dt><dd>Random</dd></div>
+                  <div class="keys-row"><dt>F</dt><dd>Focus</dd></div>
+                  <div class="keys-row"><dt>B</dt><dd>Books</dd></div>
+                  <div class="keys-row"><dt>M</dt><dd>Options</dd></div>
+                  <div class="keys-row"><dt>/</dt><dd>Find</dd></div>
+                  <div class="keys-row"><dt>URL</dt><dd><code>?t=</code> <code>book=</code> <code>section=</code></dd></div>
+                  <div class="keys-row"><dt>Esc</dt><dd>Close</dd></div>
                 </dl>
               </div>
               <div class="menu-panel menu-panel--prose" id="menu-panel-about" hidden>
                 <p class="about-lead">Marcus Aurelius — <em>Meditations</em></p>
                 <p class="about-p" id="about-source"></p>
                 <p class="about-p" id="about-translator"></p>
-                <p class="about-p about-p--mute">Reader is a quiet companion for the text. Swipe the passage to turn pages where supported.</p>
+                <p class="about-p about-p--mute">The text is the center. Swipe to turn where supported.</p>
               </div>
             </div>
           </div>
@@ -308,7 +309,7 @@ export function initReader(mount: HTMLElement): ReaderController {
         <div class="sheet__panel sheet__panel--wide" role="dialog" aria-modal="true" aria-labelledby="compare-sheet-title">
           <div class="sheet__toolbar">
             <div class="sheet__toolbar-start"></div>
-            <h2 class="sheet__title" id="compare-sheet-title">Compare</h2>
+            <h2 class="sheet__title" id="compare-sheet-title">Editions</h2>
             <div class="sheet__toolbar-end">
               <button type="button" class="icon-btn" id="compare-close" aria-label="Close">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -317,7 +318,7 @@ export function initReader(mount: HTMLElement): ReaderController {
           </div>
           <div class="sheet__body sheet__body--compare">
             <label class="compare-field">
-              <span class="compare-field__label">Other edition</span>
+              <span class="compare-field__label">Second</span>
               <select id="compare-other-select" class="menu-translation__select" aria-label="Second translation"></select>
             </label>
             <p class="compare-meta" id="compare-meta"></p>
@@ -340,6 +341,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   const btnNext = mount.querySelector<HTMLButtonElement>("#btn-next")!;
   const btnRand = mount.querySelector<HTMLButtonElement>("#btn-rand")!;
   const btnFocus = mount.querySelector<HTMLButtonElement>("#btn-focus")!;
+  const btnReturn = mount.querySelector<HTMLButtonElement>("#btn-return")!;
   const btnToday = mount.querySelector<HTMLButtonElement>("#btn-today")!;
   const btnBooks = mount.querySelector<HTMLButtonElement>("#btn-books")!;
   const navSheet = mount.querySelector<HTMLElement>("#nav-sheet")!;
@@ -377,7 +379,6 @@ export function initReader(mount: HTMLElement): ReaderController {
   const searchResults = mount.querySelector<HTMLElement>("#search-results")!;
   const translationSelect = mount.querySelector<HTMLSelectElement>("#translation-select")!;
   const themeSelect = mount.querySelector<HTMLSelectElement>("#theme-select")!;
-  const menuStreakLine = mount.querySelector<HTMLElement>("#menu-streak-line")!;
   const menuItemToday = mount.querySelector<HTMLButtonElement>("#menu-item-today")!;
   const menuItemCompare = mount.querySelector<HTMLButtonElement>("#menu-item-compare")!;
   const menuItemCopy = mount.querySelector<HTMLButtonElement>("#menu-item-copy")!;
@@ -454,33 +455,6 @@ export function initReader(mount: HTMLElement): ReaderController {
   function passageFade(): void {
     if (!motionOk()) return;
     passageFade();
-  }
-
-  function updateStreakLine(): void {
-    try {
-      const today = dateKey(new Date());
-      const last = localStorage.getItem(STORAGE_STREAK_LAST);
-      let n = Number(localStorage.getItem(STORAGE_STREAK_COUNT) || "0") || 0;
-
-      if (last === today) {
-        menuStreakLine.textContent =
-          n > 1 ? `${n}-day streak.` : "Open any day to start a streak.";
-        return;
-      }
-
-      const y = new Date();
-      y.setDate(y.getDate() - 1);
-      const yKey = dateKey(y);
-
-      if (last === yKey) n += 1;
-      else n = 1;
-
-      localStorage.setItem(STORAGE_STREAK_LAST, today);
-      localStorage.setItem(STORAGE_STREAK_COUNT, String(n));
-      menuStreakLine.textContent = n > 1 ? `${n}-day streak.` : "Streak started — see you tomorrow.";
-    } catch {
-      menuStreakLine.textContent = "";
-    }
   }
 
   function applyTheme(themeId: string): void {
@@ -590,9 +564,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   function updateDigestMenuHint(): void {
     const on = shell.dataset.digest === "1";
     menuItemDigest.setAttribute("aria-pressed", on ? "true" : "false");
-    menuDigestHint.textContent = on
-      ? "One short thought at a time — on"
-      : "One short thought at a time — off";
+    menuDigestHint.textContent = on ? "One beat — on" : "One beat — off";
   }
 
   function setDigest(on: boolean): void {
@@ -614,7 +586,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   function setFocus(on: boolean): void {
     shell.dataset.focus = on ? "1" : "0";
     btnFocus.setAttribute("aria-pressed", on ? "true" : "false");
-    btnFocus.setAttribute("aria-label", on ? "Exit focus mode" : "Focus mode");
+    btnFocus.setAttribute("aria-label", on ? "Leave focus" : "Focus");
     saveFocus(on);
   }
 
@@ -655,7 +627,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuPanelKeys.hidden = true;
     menuPanelAbout.hidden = true;
     menuBack.classList.add("is-inert");
-    menuSheetTitle.textContent = "Menu";
+    menuSheetTitle.textContent = "Options";
     setBodyScrollLock();
     btnMenu.focus();
   }
@@ -669,10 +641,10 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuPanelAbout.hidden = mode !== "about";
     menuBack.classList.toggle("is-inert", mode === "main");
     const titles: Record<MenuMode, string> = {
-      main: "Menu",
-      jump: "Jump",
-      search: "Search",
-      keys: "Shortcuts",
+      main: "Options",
+      jump: "Passage",
+      search: "Find",
+      keys: "Keys",
       about: "About",
     };
     menuSheetTitle.textContent = titles[mode];
@@ -686,7 +658,7 @@ export function initReader(mount: HTMLElement): ReaderController {
       return;
     }
     if (q.length < 2) {
-      searchStatus.textContent = "Type at least 2 letters to search.";
+      searchStatus.textContent = "Two letters or more.";
       return;
     }
     const qLower = q.toLowerCase();
@@ -886,6 +858,24 @@ export function initReader(mount: HTMLElement): ReaderController {
     });
   }
 
+  function openFromBeginning(): void {
+    if (passages.length === 0) return;
+    index = 0;
+    beatIndex = 0;
+    setDigest(false);
+    setFocus(false);
+    vibrate();
+    render();
+    passageFade();
+    window.requestAnimationFrame(() => {
+      try {
+        body.scrollIntoView({ block: "start", behavior: "smooth" });
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
   async function copyQuotation(): Promise<void> {
     const p = passages[index];
     if (!p) return;
@@ -911,7 +901,6 @@ export function initReader(mount: HTMLElement): ReaderController {
     themeSelect.value = document.documentElement.dataset.theme === "sepia" || document.documentElement.dataset.theme === "paper"
       ? document.documentElement.dataset.theme
       : "dark";
-    updateStreakLine();
     updateDigestMenuHint();
     btnMenu.focus();
   }
@@ -1352,9 +1341,9 @@ export function initReader(mount: HTMLElement): ReaderController {
       loadFocus();
       loadDigest();
       updateDigestMenuHint();
-      updateStreakLine();
       reflectSection.hidden = false;
       syncPassageUrl();
+      window.dispatchEvent(new CustomEvent("aurelius:reader-ready"));
     })
     .catch(() => {
       meta.textContent = "Could not load text";
@@ -1384,6 +1373,10 @@ export function initReader(mount: HTMLElement): ReaderController {
     goToTodaySession();
   });
 
+  btnReturn.addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("aurelius:return-threshold"));
+  });
+
   btnToday.addEventListener("click", () => {
     goToTodaySession();
   });
@@ -1410,5 +1403,5 @@ export function initReader(mount: HTMLElement): ReaderController {
     closeMenu();
   });
 
-  return { closeOverlays: closeReaderOverlays, goToPassage, goToTodaySession };
+  return { closeOverlays: closeReaderOverlays, goToPassage, goToTodaySession, openFromBeginning };
 }

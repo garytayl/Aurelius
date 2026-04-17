@@ -42,9 +42,10 @@ export function initGuided(mount: HTMLElement): void {
 
   mount.innerHTML = `
     <div class="guided-shell">
+      <button type="button" class="guided-return" id="guided-return">Return</button>
       <header class="guided-header">
-        <h1 class="guided-title">Guided</h1>
-        <p class="guided-lead">Timed sessions—breath, slow reading from the text, silence, and a short prompt—using the Casaubon translation.</p>
+        <h1 class="guided-title">Sessions</h1>
+        <p class="guided-lead">Breath, slow reading, silence, one prompt. Casaubon text.</p>
       </header>
       <p class="guided-error" id="guided-error" hidden role="alert"></p>
       <ul class="guided-list" id="guided-list" role="list"></ul>
@@ -53,13 +54,14 @@ export function initGuided(mount: HTMLElement): void {
         <p class="guided-run__meta" id="guided-meta"></p>
         <div class="guided-run__body" id="guided-body"></div>
         <div class="guided-run__actions">
-          <button type="button" class="guided-btn guided-btn--ghost" id="guided-exit">Exit</button>
+          <button type="button" class="guided-btn guided-btn--ghost" id="guided-exit">Close</button>
           <button type="button" class="guided-btn guided-btn--primary" id="guided-primary">Continue</button>
         </div>
       </div>
     </div>
   `;
 
+  const btnGuidedReturn = mount.querySelector<HTMLButtonElement>("#guided-return")!;
   const errEl = mount.querySelector<HTMLElement>("#guided-error")!;
   const listEl = mount.querySelector<HTMLElement>("#guided-list")!;
   const runEl = mount.querySelector<HTMLElement>("#guided-run")!;
@@ -68,6 +70,10 @@ export function initGuided(mount: HTMLElement): void {
   const bodyEl = mount.querySelector<HTMLElement>("#guided-body")!;
   const btnExit = mount.querySelector<HTMLButtonElement>("#guided-exit")!;
   const btnPrimary = mount.querySelector<HTMLButtonElement>("#guided-primary")!;
+
+  btnGuidedReturn.addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("aurelius:return-threshold"));
+  });
 
   let activeSession: GuidedSession | null = null;
   let stepIndex = 0;
