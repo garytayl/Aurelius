@@ -112,44 +112,44 @@ export function initReader(mount: HTMLElement): ReaderController {
       </div>
       <main class="folio stage">
         <div class="folio__toolbar">
-          <button type="button" class="folio__ref meta meta--jump" id="meta" title="Contents"></button>
-          <select id="translation-select" class="folio__edition" aria-label="Edition">
-            <option value="casaubon">Casaubon (1634)</option>
-            <option value="long">Long (1862)</option>
-            <option value="chrystal">Chrystal (1902)</option>
-          </select>
+          <button type="button" class="folio__ref meta meta--jump" id="meta" title="Index"></button>
+          <div class="folio__edition-wrap">
+            <select id="translation-select" class="folio__edition" aria-label="Translation">
+              <option value="casaubon">Casaubon (1634)</option>
+              <option value="long">Long (1862)</option>
+              <option value="chrystal">Chrystal (1902)</option>
+            </select>
+          </div>
           <span class="folio__toolbar-spacer" aria-hidden="true"></span>
-          <button type="button" class="folio__icon" id="btn-books" aria-label="Contents" aria-haspopup="dialog">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <button type="button" class="folio__icon" id="btn-books" aria-label="Index" aria-haspopup="dialog">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true">
               <path d="M4 6h16M4 12h10M4 18h16"/>
             </svg>
           </button>
-          <button type="button" class="folio__icon" id="btn-menu" aria-label="More" aria-haspopup="dialog">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-              <circle cx="12" cy="6" r="1.5" fill="currentColor" stroke="none"/>
-              <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-              <circle cx="12" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+          <button type="button" class="folio__icon" id="btn-menu" aria-label="Other" aria-haspopup="dialog">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true">
+              <circle cx="12" cy="6" r="1.25" fill="currentColor" stroke="none"/>
+              <circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none"/>
+              <circle cx="12" cy="18" r="1.25" fill="currentColor" stroke="none"/>
             </svg>
           </button>
-          <button type="button" class="folio__icon" id="btn-focus" aria-pressed="false" aria-label="Focus">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <button type="button" class="folio__icon" id="btn-focus" aria-pressed="false" aria-label="Solo">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true">
               <path d="M4 8V6a2 2 0 012-2h2M20 8V6a2 2 0 00-2-2h-2M4 16v2a2 2 0 002 2h2M20 16v2a2 2 0 01-2 2h-2"/>
             </svg>
           </button>
         </div>
-        <div class="folio__turn" aria-label="Turn">
+        <div class="folio__turn" aria-label="Page">
           <button type="button" class="folio__step" id="btn-prev" aria-label="Previous">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
           </button>
-          <button type="button" class="folio__step folio__step--text" id="btn-today">Today</button>
           <button type="button" class="folio__step" id="btn-next" aria-label="Next">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
           </button>
         </div>
         <article class="passage folio__passage" id="passage-body"></article>
-        <section class="reflect folio__margin" id="reflect-section" aria-label="Note" hidden>
+        <section class="reflect folio__margin" id="reflect-section" aria-label="Annotation" hidden>
           <p class="reflect__prompt" id="reflect-prompt"></p>
-          <label class="reflect__label" for="reflect-note">Note</label>
           <textarea
             id="reflect-note"
             class="reflect__note"
@@ -157,7 +157,8 @@ export function initReader(mount: HTMLElement): ReaderController {
             rows="2"
             autocomplete="off"
             spellcheck="true"
-            placeholder="Margin."
+            aria-label="Private annotation"
+            placeholder="If you wish."
           ></textarea>
         </section>
       </main>
@@ -192,7 +193,7 @@ export function initReader(mount: HTMLElement): ReaderController {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
               </button>
             </div>
-            <h2 class="sheet__title" id="menu-sheet-title">Options</h2>
+            <h2 class="sheet__title" id="menu-sheet-title">Other</h2>
             <div class="sheet__toolbar-end">
               <button type="button" class="icon-btn" id="menu-close" aria-label="Close">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -278,7 +279,7 @@ export function initReader(mount: HTMLElement): ReaderController {
                   <div class="keys-row"><dt>R</dt><dd>Random</dd></div>
                   <div class="keys-row"><dt>F</dt><dd>Focus</dd></div>
                   <div class="keys-row"><dt>B</dt><dd>Books</dd></div>
-                  <div class="keys-row"><dt>M</dt><dd>Options</dd></div>
+                  <div class="keys-row"><dt>M</dt><dd>Other</dd></div>
                   <div class="keys-row"><dt>/</dt><dd>Find</dd></div>
                   <div class="keys-row"><dt>URL</dt><dd><code>?t=</code> <code>book=</code> <code>section=</code></dd></div>
                   <div class="keys-row"><dt>Esc</dt><dd>Close</dd></div>
@@ -330,7 +331,6 @@ export function initReader(mount: HTMLElement): ReaderController {
   const btnPrev = mount.querySelector<HTMLButtonElement>("#btn-prev")!;
   const btnNext = mount.querySelector<HTMLButtonElement>("#btn-next")!;
   const btnFocus = mount.querySelector<HTMLButtonElement>("#btn-focus")!;
-  const btnToday = mount.querySelector<HTMLButtonElement>("#btn-today")!;
   const btnBooks = mount.querySelector<HTMLButtonElement>("#btn-books")!;
   const navSheet = mount.querySelector<HTMLElement>("#nav-sheet")!;
   const sheetScrim = mount.querySelector<HTMLButtonElement>("#sheet-scrim")!;
@@ -575,7 +575,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   function setFocus(on: boolean): void {
     shell.dataset.focus = on ? "1" : "0";
     btnFocus.setAttribute("aria-pressed", on ? "true" : "false");
-    btnFocus.setAttribute("aria-label", on ? "Leave focus" : "Focus");
+    btnFocus.setAttribute("aria-label", on ? "Leave solo" : "Solo");
     saveFocus(on);
   }
 
@@ -616,7 +616,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuPanelKeys.hidden = true;
     menuPanelAbout.hidden = true;
     menuBack.classList.add("is-inert");
-    menuSheetTitle.textContent = "Options";
+    menuSheetTitle.textContent = "Other";
     setBodyScrollLock();
     btnMenu.focus();
   }
@@ -630,7 +630,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuPanelAbout.hidden = mode !== "about";
     menuBack.classList.toggle("is-inert", mode === "main");
     const titles: Record<MenuMode, string> = {
-      main: "Options",
+      main: "Other",
       jump: "Passage",
       search: "Find",
       keys: "Keys",
@@ -1363,10 +1363,6 @@ export function initReader(mount: HTMLElement): ReaderController {
   menuItemRandom.addEventListener("click", () => {
     goRandom();
     closeMenu();
-  });
-
-  btnToday.addEventListener("click", () => {
-    goToTodaySession();
   });
 
   reflectNote.addEventListener("input", () => {
