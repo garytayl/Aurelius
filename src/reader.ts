@@ -8,6 +8,19 @@ const STORAGE_TRANSLATION = "aurelius-translation";
 const STORAGE_THEME = "aurelius-theme";
 const STORAGE_STREAK_COUNT = "aurelius-streak-count";
 const STORAGE_STREAK_LAST = "aurelius-streak-last";
+const STORAGE_TAKEAWAY_PREFIX = "aurelius-takeaway-";
+
+/** Marcus-specific prompts; one per day is chosen deterministically by date. */
+const REFLECT_PROMPTS: string[] = [
+  "What illusion is Marcus attacking here?",
+  "What part of yourself resists this passage?",
+  "What would it look like to practice this today?",
+  "What judgment is creating your distress here?",
+  "What is Marcus asking you to let go of?",
+  "Where are you inflaming yourself with opinion?",
+  "What would follow from accepting this as nature?",
+  "What duty is implied in these lines?",
+];
 
 const TRANSLATIONS: { id: string; file: string }[] = [
   { id: "casaubon", file: "/meditations.json" },
@@ -83,6 +96,8 @@ function excerptWithMatchHtml(text: string, query: string): string {
 export type ReaderController = {
   closeOverlays: () => void;
   goToPassage: (opts: { book: number; section: number; translationId?: string }) => Promise<void>;
+  /** Jump to today’s deterministic passage and digest beat; enables focus. */
+  goToTodaySession: () => void;
 };
 
 export function initReader(mount: HTMLElement): ReaderController {
@@ -97,6 +112,7 @@ export function initReader(mount: HTMLElement): ReaderController {
       </div>
       <header class="top">
         <div class="top__slot top__slot--start">
+          <button type="button" class="today-btn" id="btn-today" aria-label="Today’s reading">Today</button>
           <button type="button" class="icon-btn" id="btn-books" aria-label="Books and sections" aria-haspopup="dialog">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path d="M4 6h16M4 12h10M4 18h16"/>
@@ -122,6 +138,19 @@ export function initReader(mount: HTMLElement): ReaderController {
       <main class="stage">
         <button type="button" class="meta meta--jump" id="meta" title="Sections in this book"></button>
         <article class="passage" id="passage-body"></article>
+        <section class="reflect" id="reflect-section" aria-label="Reflection" hidden>
+          <p class="reflect__prompt" id="reflect-prompt"></p>
+          <label class="reflect__label" for="reflect-note">Your takeaway</label>
+          <textarea
+            id="reflect-note"
+            class="reflect__note"
+            name="takeaway"
+            rows="3"
+            autocomplete="off"
+            spellcheck="true"
+            placeholder="One line is enough."
+          ></textarea>
+        </section>
       </main>
       <nav class="dock" aria-label="Navigate passages">
         <button type="button" class="dock-btn" id="btn-prev" aria-label="Previous passage">
@@ -197,8 +226,8 @@ export function initReader(mount: HTMLElement): ReaderController {
                 <p class="menu-streak" id="menu-streak-line" aria-live="polite"></p>
                 <div class="menu-list" role="menu">
                   <button type="button" class="menu-item" id="menu-item-today" role="menuitem">
-                    <span class="menu-item__label">Today&apos;s passage</span>
-                    <span class="menu-item__hint">Same text each calendar day</span>
+                    <span class="menu-item__label">Today&apos;s reading</span>
+                    <span class="menu-item__hint">Deterministic passage and digest beat</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-compare" role="menuitem">
                     <span class="menu-item__label">Compare translations</span>
@@ -303,11 +332,15 @@ export function initReader(mount: HTMLElement): ReaderController {
   const stage = mount.querySelector<HTMLElement>(".stage")!;
   const meta = mount.querySelector<HTMLButtonElement>("#meta")!;
   const body = mount.querySelector<HTMLElement>("#passage-body")!;
+  const reflectSection = mount.querySelector<HTMLElement>("#reflect-section")!;
+  const reflectPromptEl = mount.querySelector<HTMLElement>("#reflect-prompt")!;
+  const reflectNote = mount.querySelector<HTMLTextAreaElement>("#reflect-note")!;
   const fill = mount.querySelector<HTMLElement>(".progress__fill")!;
   const btnPrev = mount.querySelector<HTMLButtonElement>("#btn-prev")!;
   const btnNext = mount.querySelector<HTMLButtonElement>("#btn-next")!;
   const btnRand = mount.querySelector<HTMLButtonElement>("#btn-rand")!;
   const btnFocus = mount.querySelector<HTMLButtonElement>("#btn-focus")!;
+  const btnToday = mount.querySelector<HTMLButtonElement>("#btn-today")!;
   const btnBooks = mount.querySelector<HTMLButtonElement>("#btn-books")!;
   const navSheet = mount.querySelector<HTMLElement>("#nav-sheet")!;
   const sheetScrim = mount.querySelector<HTMLButtonElement>("#sheet-scrim")!;
@@ -367,6 +400,23 @@ export function initReader(mount: HTMLElement): ReaderController {
     let h = 2166136261;
     for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
     return (Math.abs(h) >>> 0) % len;
+  }
+
+  /** Which digest beat within the daily passage (same calendar date → same beat). */
+  function dailyBeatIndex(len: number): number {
+    if (len <= 1) return 0;
+    const key = `${dateKey(new Date())}|beat`;
+    let h = 5381;
+    for (let i = 0; i < key.length; i++) h = Math.imul((h << 5) + h, 1) ^ key.charCodeAt(i);
+    return (Math.abs(h) >>> 0) % len;
+  }
+
+  function dailyPromptIndex(n: number): number {
+    if (n <= 0) return 0;
+    const key = `${dateKey(new Date())}|prompt`;
+    let h = 374761393;
+    for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 2654435761);
+    return (Math.abs(h) >>> 0) % n;
   }
 
   function parseUrlPassage(): { translationId: string; book: number; section: number } | null {
@@ -458,6 +508,9 @@ export function initReader(mount: HTMLElement): ReaderController {
   let index = 0;
   /** Index of the short "beat" within the current passage when digest mode is on */
   let beatIndex = 0;
+  /** Avoid clobbering the takeaway field when the calendar day is unchanged */
+  let lastHydratedTakeawayKey = "";
+  let takeawaySaveTimer: ReturnType<typeof setTimeout> | undefined;
   let corpusMeta = { source: "", translator: "" };
 
   type MenuMode = "main" | "jump" | "search" | "keys" | "about";
@@ -807,6 +860,32 @@ export function initReader(mount: HTMLElement): ReaderController {
     }
   }
 
+  function goToTodaySession(): void {
+    if (passages.length === 0) return;
+    index = dailyPassageIndex(passages.length);
+    setDigest(true);
+    const p = passages[index];
+    const beats = p ? splitDigestBeats(p.text) : [];
+    const len = beats.length > 0 ? beats.length : 1;
+    beatIndex = dailyBeatIndex(len);
+    if (beats.length === 0) beatIndex = 0;
+    setFocus(true);
+    vibrate();
+    if (menuSheet.classList.contains("sheet--open")) closeMenu();
+    if (navSheet.classList.contains("sheet--open")) closeNavSheetOnly();
+    if (compareSheet.classList.contains("sheet--open")) closeCompareSheet();
+    setBodyScrollLock();
+    render();
+    passageFade();
+    window.requestAnimationFrame(() => {
+      try {
+        body.scrollIntoView({ block: "start", behavior: "smooth" });
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
   async function copyQuotation(): Promise<void> {
     const p = passages[index];
     if (!p) return;
@@ -982,7 +1061,21 @@ export function initReader(mount: HTMLElement): ReaderController {
     sheetBooks.appendChild(frag);
   }
 
+  function hydrateTakeawayIfNeeded(): void {
+    const k = `${STORAGE_TAKEAWAY_PREFIX}${dateKey(new Date())}`;
+    if (k === lastHydratedTakeawayKey) return;
+    lastHydratedTakeawayKey = k;
+    try {
+      reflectNote.value = localStorage.getItem(k) ?? "";
+    } catch {
+      reflectNote.value = "";
+    }
+    const pi = dailyPromptIndex(REFLECT_PROMPTS.length);
+    reflectPromptEl.textContent = REFLECT_PROMPTS[pi] ?? REFLECT_PROMPTS[0];
+  }
+
   function render(): void {
+    hydrateTakeawayIfNeeded();
     const p = passages[index];
     if (!p) return;
     const digestOn = shell.dataset.digest === "1";
@@ -1260,12 +1353,14 @@ export function initReader(mount: HTMLElement): ReaderController {
       loadDigest();
       updateDigestMenuHint();
       updateStreakLine();
+      reflectSection.hidden = false;
       syncPassageUrl();
     })
     .catch(() => {
       meta.textContent = "Could not load text";
       body.innerHTML =
         "<p class=\"passage__p\">Place JSON in <code>public/</code> and run the dev server.</p>";
+      reflectSection.hidden = true;
     });
 
   function closeReaderOverlays(): void {
@@ -1286,14 +1381,23 @@ export function initReader(mount: HTMLElement): ReaderController {
   });
 
   menuItemToday.addEventListener("click", () => {
-    if (passages.length === 0) return;
-    const j = dailyPassageIndex(passages.length);
-    index = j;
-    beatIndex = 0;
-    vibrate();
-    closeMenu();
-    render();
-    passageFade();
+    goToTodaySession();
+  });
+
+  btnToday.addEventListener("click", () => {
+    goToTodaySession();
+  });
+
+  reflectNote.addEventListener("input", () => {
+    const k = `${STORAGE_TAKEAWAY_PREFIX}${dateKey(new Date())}`;
+    window.clearTimeout(takeawaySaveTimer);
+    takeawaySaveTimer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(k, reflectNote.value);
+      } catch {
+        /* ignore */
+      }
+    }, 320);
   });
 
   menuItemCompare.addEventListener("click", () => {
@@ -1306,5 +1410,5 @@ export function initReader(mount: HTMLElement): ReaderController {
     closeMenu();
   });
 
-  return { closeOverlays: closeReaderOverlays, goToPassage };
+  return { closeOverlays: closeReaderOverlays, goToPassage, goToTodaySession };
 }

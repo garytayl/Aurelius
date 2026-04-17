@@ -271,6 +271,36 @@ body {
 
 .top__slot--start {
   justify-content: flex-start;
+  gap: 0.2rem;
+}
+
+.today-btn {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.42rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.2s,
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.today-btn:hover,
+.today-btn:focus-visible {
+  color: var(--text);
+  border-color: rgba(201, 171, 122, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
 }
 
 .top__slot--end {
@@ -417,6 +447,74 @@ body {
 .passage code {
   font-size: 0.85em;
   color: var(--accent);
+}
+
+/* Daily reflection (one prompt + one private note per calendar day) */
+.reflect {
+  flex-shrink: 0;
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.reflect__prompt {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-serif);
+  font-size: clamp(1.05rem, 3.2vw, 1.2rem);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--text-mute);
+}
+
+.reflect__label {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-dim);
+}
+
+.reflect__note {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.65rem;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  font-weight: 400;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 4.25rem;
+  max-height: 12rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.reflect__note::placeholder {
+  color: var(--text-mute);
+  opacity: 0.75;
+}
+
+.reflect__note:focus {
+  outline: none;
+  border-color: rgba(201, 171, 122, 0.35);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+html[data-theme="paper"] .reflect {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="paper"] .reflect__note {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 /* Dock */

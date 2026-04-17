@@ -40,6 +40,11 @@ export function initApp(appRoot: HTMLElement): void {
     });
   }) as EventListener);
 
+  window.addEventListener("aurelius:go-today", () => {
+    setFeature("reader");
+    reader.goToTodaySession();
+  });
+
   function loadSavedFeature(): AppFeature {
     try {
       const s = localStorage.getItem(STORAGE_FEATURE);
