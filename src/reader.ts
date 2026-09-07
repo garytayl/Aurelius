@@ -32,6 +32,13 @@ const TRANSLATION_LABELS: Record<string, string> = {
   chrystal: "George W. Chrystal (1902)",
 };
 
+const IDEA_THREADS = [
+  { title: "Meet the day", note: "For when you need to begin again.", refs: [[2, 1], [5, 1], [3, 4]] },
+  { title: "When people are difficult", note: "A kinder way to keep your ground.", refs: [[2, 1], [6, 6], [6, 30]] },
+  { title: "Do the next right thing", note: "For shrinking a complicated day to size.", refs: [[2, 5], [3, 12], [5, 20]] },
+  { title: "Let it go", note: "A few reminders about what is not yours to carry.", refs: [[2, 11], [4, 3], [4, 17]] },
+] as const;
+
 function flatText(raw: string): string {
   return raw.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -214,6 +221,10 @@ export function initReader(mount: HTMLElement): ReaderController {
                     <span class="menu-item__label">Today</span>
                     <span class="menu-item__hint">This day</span>
                   </button>
+                  <button type="button" class="menu-item menu-item--ideas" id="menu-item-ideas" role="menuitem">
+                    <span class="menu-item__label">Ideas</span>
+                    <span class="menu-item__hint">Follow a thread</span>
+                  </button>
                   <button type="button" class="menu-item" id="menu-item-random" role="menuitem">
                     <span class="menu-item__label">Random</span>
                     <span class="menu-item__hint">Elsewhere in the text</span>
@@ -269,6 +280,10 @@ export function initReader(mount: HTMLElement): ReaderController {
                 </label>
                 <p class="search-status" id="search-status" aria-live="polite"></p>
                 <ul class="search-results" id="search-results"></ul>
+              </div>
+              <div class="menu-panel menu-panel--ideas" id="menu-panel-ideas" hidden>
+                <p class="idea-lead">Marcus is more fun in company. Pick a thread and follow it for a few complete thoughts.</p>
+                <div class="idea-list" id="idea-list"></div>
               </div>
               <div class="menu-panel menu-panel--prose" id="menu-panel-keys" hidden>
                 <dl class="keys-list">
@@ -343,9 +358,12 @@ export function initReader(mount: HTMLElement): ReaderController {
   const menuPanelMain = mount.querySelector<HTMLElement>("#menu-panel-main")!;
   const menuPanelJump = mount.querySelector<HTMLElement>("#menu-panel-jump")!;
   const menuPanelSearch = mount.querySelector<HTMLElement>("#menu-panel-search")!;
+  const menuPanelIdeas = mount.querySelector<HTMLElement>("#menu-panel-ideas")!;
   const menuPanelKeys = mount.querySelector<HTMLElement>("#menu-panel-keys")!;
   const menuPanelAbout = mount.querySelector<HTMLElement>("#menu-panel-about")!;
   const menuItemJump = mount.querySelector<HTMLButtonElement>("#menu-item-jump")!;
+  const menuItemIdeas = mount.querySelector<HTMLButtonElement>("#menu-item-ideas")!;
+  const ideaList = mount.querySelector<HTMLElement>("#idea-list")!;
   const menuItemDigest = mount.querySelector<HTMLButtonElement>("#menu-item-digest")!;
   const menuDigestHint = mount.querySelector<HTMLElement>("#menu-digest-hint")!;
   const menuItemSearch = mount.querySelector<HTMLButtonElement>("#menu-item-search")!;
@@ -476,7 +494,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   let takeawaySaveTimer: ReturnType<typeof setTimeout> | undefined;
   let corpusMeta = { source: "", translator: "" };
 
-  type MenuMode = "main" | "jump" | "search" | "keys" | "about";
+  type MenuMode = "main" | "jump" | "search" | "ideas" | "keys" | "about";
   let menuMode: MenuMode = "main";
 
   const SEARCH_MAX = 100;
@@ -613,6 +631,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuPanelMain.hidden = false;
     menuPanelJump.hidden = true;
     menuPanelSearch.hidden = true;
+    menuPanelIdeas.hidden = true;
     menuPanelKeys.hidden = true;
     menuPanelAbout.hidden = true;
     menuBack.classList.add("is-inert");
@@ -626,6 +645,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuPanelMain.hidden = mode !== "main";
     menuPanelJump.hidden = mode !== "jump";
     menuPanelSearch.hidden = mode !== "search";
+    menuPanelIdeas.hidden = mode !== "ideas";
     menuPanelKeys.hidden = mode !== "keys";
     menuPanelAbout.hidden = mode !== "about";
     menuBack.classList.toggle("is-inert", mode === "main");
@@ -633,6 +653,7 @@ export function initReader(mount: HTMLElement): ReaderController {
       main: "Reading",
       jump: "Passage",
       search: "Find",
+      ideas: "Ideas",
       keys: "Keys",
       about: "About",
     };
@@ -915,7 +936,33 @@ export function initReader(mount: HTMLElement): ReaderController {
       aboutTranslator.textContent = tr ? `Edition: ${tr}.` : "";
       aboutTranslator.hidden = !tr;
     }
+    if (mode === "ideas") renderIdeaThreads();
     showMenuPanel(mode);
+  }
+
+  function renderIdeaThreads(): void {
+    ideaList.innerHTML = "";
+    for (const thread of IDEA_THREADS) {
+      const card = document.createElement("section");
+      card.className = "idea-card";
+      const head = document.createElement("div");
+      head.innerHTML = `<h3>${escapeHtml(thread.title)}</h3><p>${escapeHtml(thread.note)}</p>`;
+      const picks = document.createElement("div");
+      picks.className = "idea-picks";
+      for (const [book, section] of thread.refs) {
+        const i = passages.findIndex((p) => p.book === book && p.section === section);
+        if (i < 0) continue;
+        const p = passages[i];
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "idea-pick";
+        button.innerHTML = `<span>Book ${BOOK_ROMAN[book]} · ${p.roman}</span><b>${escapeHtml(previewLine(p.text, 88))}</b>`;
+        button.addEventListener("click", () => { index = i; beatIndex = 0; vibrate(); closeMenu(); render(); passageFade(); });
+        picks.appendChild(button);
+      }
+      card.append(head, picks);
+      ideaList.appendChild(card);
+    }
   }
 
   function openMenuToSearch(): void {
@@ -1166,6 +1213,8 @@ export function initReader(mount: HTMLElement): ReaderController {
   menuItemSearch.addEventListener("click", () => {
     openMenuToSearch();
   });
+
+  menuItemIdeas.addEventListener("click", () => openMenuSub("ideas"));
 
   searchQ.addEventListener("input", () => {
     clearTimeout(searchDebounce);

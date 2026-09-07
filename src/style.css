@@ -745,6 +745,89 @@ html[data-theme="paper"] .reflect__note {
   padding-bottom: 0.25rem;
 }
 
+.menu-panel--ideas {
+  padding: 0.35rem 0 0.6rem;
+}
+
+.idea-lead {
+  margin: 0 0 1.25rem;
+  color: var(--text-mute);
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  line-height: 1.45;
+}
+
+.idea-list {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.idea-card {
+  padding: 1rem;
+  border: 1px solid rgba(225, 138, 95, 0.22);
+  border-radius: 0.4rem;
+  background: linear-gradient(145deg, rgba(225, 138, 95, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.idea-card h3 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 1.55rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.idea-card > div > p {
+  margin: 0.25rem 0 0.85rem;
+  color: var(--text-mute);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.idea-picks {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.idea-pick {
+  display: grid;
+  gap: 0.24rem;
+  width: 100%;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.25rem;
+  background: rgba(10, 22, 24, 0.18);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.idea-pick:hover,
+.idea-pick:focus-visible {
+  transform: translateX(3px);
+  border-color: var(--accent);
+  background: rgba(225, 138, 95, 0.12);
+  outline: none;
+}
+
+.idea-pick span {
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.idea-pick b {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
 .menu-translation {
   margin-bottom: 1rem;
   padding-bottom: 1rem;
