@@ -116,6 +116,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     <div class="shell" data-focus="0" data-digest="0">
       <main class="folio stage">
         <div class="folio__toolbar">
+          <button type="button" class="folio__home" id="btn-home" aria-label="Back to home">A</button>
           <button type="button" class="folio__ref meta meta--jump" id="meta" title="Browse complete thoughts"></button>
           <div class="folio__edition-wrap">
             <select id="translation-select" class="folio__edition" aria-label="Translation">
@@ -342,6 +343,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   const btnPrev = mount.querySelector<HTMLButtonElement>("#btn-prev")!;
   const btnNext = mount.querySelector<HTMLButtonElement>("#btn-next")!;
   const btnFocus = mount.querySelector<HTMLButtonElement>("#btn-focus")!;
+  const btnHome = mount.querySelector<HTMLButtonElement>("#btn-home")!;
   const btnBooks = mount.querySelector<HTMLButtonElement>("#btn-books")!;
   const navSheet = mount.querySelector<HTMLElement>("#nav-sheet")!;
   const sheetScrim = mount.querySelector<HTMLButtonElement>("#sheet-scrim")!;
@@ -1190,6 +1192,8 @@ export function initReader(mount: HTMLElement): ReaderController {
     const on = shell.dataset.focus !== "1";
     setFocus(on);
   });
+
+  btnHome.addEventListener("click", () => window.dispatchEvent(new CustomEvent("aurelius:go-home")));
 
   btnBooks.addEventListener("click", () => {
     openSheetBooks();

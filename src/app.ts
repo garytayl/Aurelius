@@ -1,29 +1,18 @@
 import { initReader } from "./reader";
 
-/**
- * One surface: the passage. No entry screen, no secondary app modes.
- */
+type Trail = { title: string; description: string; color: string; passages: { book: number; section: number; label: string }[] };
+const trails: Trail[] = [
+  { title: "Start your day", description: "A little perspective before the noise begins.", color: "sun", passages: [{ book: 2, section: 1, label: "Meet the day" }, { book: 5, section: 1, label: "Get out of bed" }, { book: 2, section: 5, label: "Do what is in front of you" }] },
+  { title: "Other people", description: "Stay kind without becoming a doormat.", color: "rose", passages: [{ book: 2, section: 1, label: "The difficult people" }, { book: 6, section: 6, label: "Do not become like them" }, { book: 6, section: 30, label: "Kindness is strength" }] },
+  { title: "Get unstuck", description: "For the days your mind has made too complicated.", color: "blue", passages: [{ book: 3, section: 12, label: "A simple test" }, { book: 5, section: 20, label: "The necessary thing" }, { book: 2, section: 11, label: "A shorter road" }] },
+  { title: "Come back to now", description: "A few ways to loosen your grip and breathe.", color: "lilac", passages: [{ book: 4, section: 3, label: "Within is the spring" }, { book: 4, section: 17, label: "Make yourself good" }, { book: 3, section: 4, label: "Do the work" }] },
+];
+
 export function initApp(appRoot: HTMLElement): void {
-  appRoot.innerHTML = `<div class="app" id="reader-panel"></div>`;
-
-  const readerPanel = appRoot.querySelector<HTMLElement>("#reader-panel")!;
-  const reader = initReader(readerPanel);
-
-  window.addEventListener(
-    "aurelius:open-passage",
-    ((e: Event) => {
-      const ce = e as CustomEvent<{ book: number; section: number; translationId?: string }>;
-      const d = ce.detail;
-      if (!d || typeof d.book !== "number" || typeof d.section !== "number") return;
-      void reader.goToPassage({
-        book: d.book,
-        section: d.section,
-        translationId: d.translationId,
-      });
-    }) as EventListener
-  );
-
-  window.addEventListener("aurelius:go-today", () => {
-    reader.goToTodaySession();
-  });
+  appRoot.innerHTML = `<div class="app-shell"><section class="home" id="home-panel"><header class="home__header"><div class="home__brand"><span>✦</span> aurelius</div><button class="home__profile" type="button" aria-label="Reading preferences">Aa</button></header><main class="home__content"><p class="home__eyebrow">Meditations, made personal</p><h1>A good thought<br>for right now.</h1><button class="today-card" id="home-today" type="button"><span class="today-card__orbit">✦</span><span class="today-card__copy"><small>Today’s pause</small><strong>Take one minute with Marcus</strong><em>A single idea, slowly read</em></span><span class="today-card__arrow">→</span></button><div class="home__section-head"><div><p>Explore by feeling</p><span>Small collections of complete ideas</span></div><button id="home-random" type="button">Surprise me</button></div><div class="trail-grid" id="trail-grid"></div></main><nav class="home__nav" aria-label="Main navigation"><button class="is-active" type="button"><span>⌂</span> Home</button><button id="nav-read" type="button"><span>≡</span> Read</button><button id="nav-random" type="button"><span>✦</span> Random</button></nav></section><section id="reader-panel" hidden></section></div>`;
+  const home = appRoot.querySelector<HTMLElement>("#home-panel")!; const readerPanel = appRoot.querySelector<HTMLElement>("#reader-panel")!; const trailGrid = appRoot.querySelector<HTMLElement>("#trail-grid")!; const reader = initReader(readerPanel);
+  const showReader = () => { home.hidden = true; readerPanel.hidden = false; }; const showHome = () => { reader.closeOverlays(); readerPanel.hidden = true; home.hidden = false; }; const openPassage = (book: number, section: number) => { showReader(); void reader.goToPassage({ book, section }); };
+  trails.forEach((trail) => { const card = document.createElement("article"); card.className = `trail-card trail-card--${trail.color}`; card.innerHTML = `<div class="trail-card__top"><span class="trail-card__mark">✦</span><span>${trail.passages.length} ideas</span></div><h2>${trail.title}</h2><p>${trail.description}</p><div class="trail-card__picks"></div>`; const picks = card.querySelector<HTMLElement>(".trail-card__picks")!; trail.passages.forEach((passage) => { const button = document.createElement("button"); button.type = "button"; button.textContent = passage.label; button.addEventListener("click", () => openPassage(passage.book, passage.section)); picks.appendChild(button); }); trailGrid.appendChild(card); });
+  appRoot.querySelector<HTMLButtonElement>("#home-today")!.addEventListener("click", () => { showReader(); reader.goToTodaySession(); }); appRoot.querySelector<HTMLButtonElement>("#home-random")!.addEventListener("click", () => { showReader(); window.dispatchEvent(new CustomEvent("aurelius:random")); }); appRoot.querySelector<HTMLButtonElement>("#nav-random")!.addEventListener("click", () => { showReader(); window.dispatchEvent(new CustomEvent("aurelius:random")); }); appRoot.querySelector<HTMLButtonElement>("#nav-read")!.addEventListener("click", showReader);
+  window.addEventListener("aurelius:open-passage", ((e: Event) => { const d = (e as CustomEvent<{ book: number; section: number; translationId?: string }>).detail; if (!d) return; showReader(); void reader.goToPassage(d); }) as EventListener); window.addEventListener("aurelius:go-home", showHome); window.addEventListener("aurelius:random", () => { readerPanel.querySelector<HTMLButtonElement>("#menu-item-random")?.click(); }); if (new URLSearchParams(window.location.search).has("book")) showReader();
 }
