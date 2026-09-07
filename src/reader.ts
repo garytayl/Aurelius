@@ -109,7 +109,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     <div class="shell" data-focus="0" data-digest="0">
       <main class="folio stage">
         <div class="folio__toolbar">
-          <button type="button" class="folio__ref meta meta--jump" id="meta" title="Index"></button>
+          <button type="button" class="folio__ref meta meta--jump" id="meta" title="Browse complete thoughts"></button>
           <div class="folio__edition-wrap">
             <select id="translation-select" class="folio__edition" aria-label="Translation">
               <option value="casaubon">Casaubon (1634)</option>
@@ -118,12 +118,12 @@ export function initReader(mount: HTMLElement): ReaderController {
             </select>
           </div>
           <span class="folio__toolbar-spacer" aria-hidden="true"></span>
-          <button type="button" class="folio__icon" id="btn-books" aria-label="Index" aria-haspopup="dialog">
+          <button type="button" class="folio__icon" id="btn-books" aria-label="Browse books and complete thoughts" aria-haspopup="dialog">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true">
               <path d="M4 6h16M4 12h10M4 18h16"/>
             </svg>
           </button>
-          <button type="button" class="folio__icon" id="btn-menu" aria-label="Else" aria-haspopup="dialog">
+          <button type="button" class="folio__icon" id="btn-menu" aria-label="Reading options" aria-haspopup="dialog">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true">
               <circle cx="12" cy="6" r="1.25" fill="currentColor" stroke="none"/>
               <circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none"/>
@@ -168,7 +168,7 @@ export function initReader(mount: HTMLElement): ReaderController {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
               </button>
             </div>
-            <h2 class="sheet__title" id="sheet-title">Books</h2>
+            <h2 class="sheet__title" id="sheet-title">Meditations</h2>
             <div class="sheet__toolbar-end">
               <button type="button" class="icon-btn" id="sheet-close" aria-label="Close">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -190,7 +190,7 @@ export function initReader(mount: HTMLElement): ReaderController {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
               </button>
             </div>
-            <h2 class="sheet__title" id="menu-sheet-title">Else</h2>
+            <h2 class="sheet__title" id="menu-sheet-title">Reading</h2>
             <div class="sheet__toolbar-end">
               <button type="button" class="icon-btn" id="menu-close" aria-label="Close">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -231,8 +231,8 @@ export function initReader(mount: HTMLElement): ReaderController {
                     <span class="menu-item__hint">Book and section</span>
                   </button>
                   <button type="button" class="menu-item menu-item--toggle" id="menu-item-digest" role="menuitemcheckbox" aria-pressed="false">
-                    <span class="menu-item__label">Digest</span>
-                    <span class="menu-item__hint" id="menu-digest-hint">One beat — off</span>
+                    <span class="menu-item__label">Slow read</span>
+                    <span class="menu-item__hint" id="menu-digest-hint">One line at a time — off</span>
                   </button>
                   <button type="button" class="menu-item" id="menu-item-search" role="menuitem">
                     <span class="menu-item__label">Find</span>
@@ -272,7 +272,7 @@ export function initReader(mount: HTMLElement): ReaderController {
               </div>
               <div class="menu-panel menu-panel--prose" id="menu-panel-keys" hidden>
                 <dl class="keys-list">
-                  <div class="keys-row"><dt>← →</dt><dd>Turn; digest advances by beat</dd></div>
+                  <div class="keys-row"><dt>← →</dt><dd>Move through complete thoughts</dd></div>
                   <div class="keys-row"><dt>R</dt><dd>Random</dd></div>
                   <div class="keys-row"><dt>F</dt><dd>Focus</dd></div>
                   <div class="keys-row"><dt>B</dt><dd>Books</dd></div>
@@ -553,7 +553,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   function updateDigestMenuHint(): void {
     const on = shell.dataset.digest === "1";
     menuItemDigest.setAttribute("aria-pressed", on ? "true" : "false");
-    menuDigestHint.textContent = on ? "One beat — on" : "One beat — off";
+    menuDigestHint.textContent = on ? "One line at a time — on" : "One line at a time — off";
   }
 
   function setDigest(on: boolean): void {
@@ -616,7 +616,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuPanelKeys.hidden = true;
     menuPanelAbout.hidden = true;
     menuBack.classList.add("is-inert");
-    menuSheetTitle.textContent = "Else";
+    menuSheetTitle.textContent = "Reading";
     setBodyScrollLock();
     btnMenu.focus();
   }
@@ -630,7 +630,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     menuPanelAbout.hidden = mode !== "about";
     menuBack.classList.toggle("is-inert", mode === "main");
     const titles: Record<MenuMode, string> = {
-      main: "Else",
+      main: "Reading",
       jump: "Passage",
       search: "Find",
       keys: "Keys",
@@ -941,7 +941,7 @@ export function initReader(mount: HTMLElement): ReaderController {
   function openSheetBooks(): void {
     if (menuSheet.classList.contains("sheet--open")) closeMenu();
     sheetBookMode = "books";
-    sheetTitle.textContent = "Books";
+    sheetTitle.textContent = "Meditations";
     sheetBack.classList.add("is-inert");
     sheetBooks.hidden = false;
     sheetSections.hidden = true;
@@ -971,7 +971,7 @@ export function initReader(mount: HTMLElement): ReaderController {
     head.className = "section-list__head";
     const metaTop = document.createElement("p");
     metaTop.className = "section-list__meta";
-    metaTop.textContent = inBook.length === 1 ? "1 section" : `${inBook.length} sections`;
+    metaTop.textContent = inBook.length === 1 ? "1 complete thought" : `${inBook.length} complete thoughts`;
     head.appendChild(metaTop);
     sheetSections.appendChild(head);
     const list = document.createElement("ul");
